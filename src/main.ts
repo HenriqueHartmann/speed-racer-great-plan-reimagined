@@ -28,6 +28,7 @@ import {
 import { Mach5 } from './render/mach5.js';
 import { TrackView } from './render/track-view.js';
 import { SegmentColliders } from './physics/segment-colliders.js';
+import { PropColliders } from './physics/prop-colliders.js';
 import { parseGroundMesh } from './sim/ground-mesh.js';
 import { OriginalMach5 } from './render/mach5-original.js';
 
@@ -145,15 +146,10 @@ async function main(): Promise<void> {
   segmentColliders.setActive(solidSegment);
 
 
-  // Solid props get a static collider so they stop the car. Pickups do not:
-  // they are collected by the simulation's overlap test and must not block.
-  const propColliders = new Map<number, ReturnType<typeof host.addStaticBox>>();
-  for (const seg of track.segments) {
-    for (const prop of seg.props) {
-      if (prop.kind === 'pickup') continue;
-      propColliders.set(prop.id, host.addStaticBox(prop.position, prop.halfExtent));
-    }
-  }
+  // Solid props, one segment tangible at a time, as doM5ChangeSegment kept
+  // them. Pickups get no collider: they are triggers, not blockers.
+  const propColliders = new PropColliders(host, track);
+  propColliders.setActive(solidSegment);
 
   // The start line is the original's own: carPos_Mach5, carried in the ground
   // data. prepareCar:146 drops the car onto the road from there; SPAWN_HEIGHT
@@ -190,7 +186,13 @@ async function main(): Promise<void> {
     world = newWorld();
     solidSegment = 1;
     segmentColliders.setActive(solidSegment);
+    // Every prop comes back: the flag, the view and the collider. The
+    // colliders were only disabled, never destroyed, which is what makes this
+    // possible - destroying them left the next run driving through a wall it
+    // could still see.
     for (const seg of track.segments) for (const prop of seg.props) prop.active = true;
+    for (const view of propViews.values()) view.visible = true;
+    propColliders.setActive(solidSegment);
   }
 
   const scene = createScene();
@@ -288,6 +290,7 @@ async function main(): Promise<void> {
     if (world.race.segment !== solidSegment) {
       solidSegment = world.race.segment;
       segmentColliders.setActive(solidSegment);
+      propColliders.setActive(solidSegment);
     }
 
     const v = world.vehicle;
@@ -314,21 +317,16 @@ async function main(): Promise<void> {
     chase.follow(chassis.position, chassis.forward, 1 - Math.exp(-8 * elapsed));
 
     // Consumed props disappear, and stop blocking. The simulation owns the
-    // flag; the renderer and the physics world only follow it.
-    for (const seg of track.segments) {
-      for (const prop of seg.props) {
-        const view = propViews.get(prop.id);
-        if (view) view.visible = prop.active;
-
-        if (!prop.active) {
-          const collider = propColliders.get(prop.id);
-          if (collider) {
-            host.removeCollider(collider);
-            propColliders.delete(prop.id);
-          }
-        }
-      }
+    // flag; the renderer and the physics world only follow it. The colliders
+    // are disabled rather than destroyed, so a restart can hand them back.
+    // The active segment's props, consumed or not - `collidableProps` filters
+    // the consumed ones out, which is right for collision and wrong here: a
+    // prop whose view is never revisited stays on screen after it is taken.
+    for (const prop of track.segment(solidSegment)?.props ?? []) {
+      const view = propViews.get(prop.id);
+      if (view) view.visible = prop.active;
     }
+    propColliders.sync();
 
     renderer.render(scene, chase.camera);
 

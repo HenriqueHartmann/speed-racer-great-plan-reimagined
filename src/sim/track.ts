@@ -56,11 +56,38 @@ export interface TrackOptions {
 /**
  * Which segment a Y coordinate falls in.
  *
- * The original computed this as `integer(y) / 300 + 1`, so segment 1 spans
- * [0, 300). Negative Y is behind the start line and clamps to segment 1.
+ * RECOVERED - `(integer(y) / 300) + 1`, which `PREP:272` uses to file every
+ * prop and `doMach5:505` uses for the car's own segment. The whole level hangs
+ * off it: which track collider is solid, which props are tangible.
+ *
+ * The rule turns on what Lingo's `integer()` does, and Director's manual is
+ * not part of this artifact. The game settles it itself. `MOVIE.ls:263-288`
+ * defines helpers the authors wrote and relied on:
+ *
+ *     on ceil f    ->  if f > 0 then return integer(f + 0.5)
+ *     on floor f   ->  if f > 0 then return integer(f - 0.5)
+ *
+ * Under a truncating `integer()` both are wrong: `trunc(1.7) = 1` is not
+ * `ceil(1.2)`, and `trunc(0.7) = 0` is not `floor(1.2)`. Under a rounding one
+ * both are right. Two helpers, each broken by truncation. **`integer()`
+ * rounds**, half away from zero.
+ *
+ * This read `Math.floor` until the props were measured, which disagrees on the
+ * half-unit below every boundary - `integer(1199.829) = 1200`, so the original
+ * files that tree in segment 5 where we filed it in 4. Two of the level's 723
+ * props sit in that band, and so does the car for one tick at every seam.
+ *
+ * The division is integer division truncating toward zero. SUPPORTED rather
+ * than CONFIRMED: the artifact never states it, but `tSEG` indexes an array
+ * directly (`PREP:387`), so it cannot be fractional.
+ *
+ * Negative Y is behind the start line and clamps to segment 1.
  */
 export function segmentIndexFor(y: number): number {
-  return Math.max(1, Math.floor(y / K.SEGMENT_LENGTH) + 1);
+  // Lingo's integer() rounds away from zero; JavaScript's Math.round sends
+  // -0.5 toward +Infinity, so negatives are rounded by their magnitude.
+  const rounded = y < 0 ? -Math.round(-y) : Math.round(y);
+  return Math.max(1, Math.trunc(rounded / K.SEGMENT_LENGTH) + 1);
 }
 
 export class Track implements GroundProbe {
