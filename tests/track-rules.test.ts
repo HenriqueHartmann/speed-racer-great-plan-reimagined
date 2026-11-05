@@ -12,7 +12,7 @@ import { AnalyticBody } from '../src/sim/analytic-body.js';
 import { Track, buildSliceTrack, segmentIndexFor } from '../src/sim/track.js';
 import { flatGroundMesh } from '../src/sim/ground-mesh.js';
 import { resolveImpact, overlaps } from '../src/sim/collision.js';
-import { vec3, type VehicleInput } from '../src/sim/vehicle.js';
+import { vec3, type GroundProbe, type VehicleInput } from '../src/sim/vehicle.js';
 import * as K from '../src/sim/constants.js';
 
 const DRIVE: VehicleInput = {
@@ -84,6 +84,61 @@ describe('the ground query', () => {
   it('still caps at the 37 slots the original pre-sized', () => {
     const track = new Track({ ground: flatGroundMesh(100) });
     expect(track.segments.length).toBe(K.SEGMENT_SLOTS);
+  });
+});
+
+describe('the fall rule', () => {
+  it('marks a missed probe with the no-ground sentinel', () => {
+    // The car sits off the side of the strip, so every ray finds nothing.
+    const body = new AnalyticBody(K.CHASSIS_MASS, vec3(500, 150, K.SPAWN_HEIGHT));
+    const track = new Track({ ground: flatGroundMesh(1) });
+    const world = new World({
+      seed: 1,
+      body,
+      probe: track,
+      track,
+      stepPhysics: (dt) => body.integrate(dt),
+    });
+    world.step(IDLE);
+    expect(world.vehicle.effectId).toBe(K.NO_GROUND_EFFECT_ID);
+  });
+
+  it('keeps the surface of a hit too far away to stand on', () => {
+    // `doMach5` sets pTrackFace from any hit at all and only then asks whether
+    // it was near enough to push against. Under HOVER_RAY_LENGTH = 1 this can
+    // never happen, because every hit is nearer than HOVER_DISTANCE = 1.2 -
+    // but the two conditions are separate in the original and stay separate
+    // here, so the third fall clause has something to be about.
+    const far: GroundProbe = {
+      castDown: (from) => ({
+        distance: 5,
+        point: vec3(from.x, from.y, from.z - 5),
+        effectId: 6,
+      }),
+    };
+    const body = new AnalyticBody(K.CHASSIS_MASS, vec3(0, 150, K.FALL_DEATH_Z - 1));
+    const world = new World({
+      seed: 1,
+      body,
+      probe: far,
+      stepPhysics: (dt) => body.integrate(dt),
+    });
+    world.step(IDLE);
+
+    expect(world.vehicle.powerCoeff).toBe(0);
+    expect(world.vehicle.effectId).toBe(6);
+    expect(world.race.outcome).toBe('running');
+  });
+
+  it('is not rescued by a quad parked far below the course', () => {
+    // Unused sub-mesh groups are padded with patches at z = -20 so that all
+    // 16 indices exist in every segment. A car falling past them must not
+    // find ground: the hover ray is only 1 unit long, and that is why.
+    const parked = flatGroundMesh(1);
+    for (let i = 2; i < parked.positions.length; i += 3) parked.positions[i] = -20;
+    const track = new Track({ ground: parked });
+    expect(track.castDown(vec3(0, 150, 5), K.HOVER_RAY_LENGTH)).toBeNull();
+    expect(track.castDown(vec3(0, 150, -19.5), K.HOVER_RAY_LENGTH)).not.toBeNull();
   });
 });
 

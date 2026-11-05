@@ -284,9 +284,15 @@ export class World {
       return;
     }
 
+    // `doMach5:675` gates this on three things, not two: below the height,
+    // no wheel hovering, and `pTrackFace = 99`. The third is redundant under
+    // the original's own ray length - a wheel is grounded exactly when its ray
+    // hits, so no wheel grounded already means the ray missed - but it is the
+    // condition the original wrote, and it says what the rule is about.
     if (
       this.body.position.z <= K.FALL_DEATH_Z &&
-      this.vehicle.powerCoeff === 0
+      this.vehicle.powerCoeff === 0 &&
+      this.vehicle.effectId === K.NO_GROUND_EFFECT_ID
     ) {
       r.outcome = 'fell';
       this.events.push({ tick: this.tick, kind: 'fell' });

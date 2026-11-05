@@ -231,7 +231,7 @@ function updateHover(
     const world = localToWorld(body, local);
     const hit = probe.castDown(world, K.HOVER_RAY_LENGTH);
 
-    if (!hit || hit.distance >= K.HOVER_DISTANCE) {
+    if (!hit) {
       state.grounded[i] = false;
       state.hoverDistances[i] = K.HOVER_DISTANCE;
       if (i === SURFACE_WHEEL) {
@@ -243,9 +243,20 @@ function updateHover(
       continue;
     }
 
+    // The original reads the surface from *any* hit and only then asks whether
+    // it was near enough to push against - `pTrackFace` is set before the
+    // `hoverDst < pHoverDist` test, not inside it. The two stay separate here
+    // even though HOVER_RAY_LENGTH being shorter than HOVER_DISTANCE means the
+    // far case cannot arise today.
     if (i === SURFACE_WHEEL) {
       state.effectId = hit.effectId;
       state.surface = K.surfaceFor(hit.effectId);
+    }
+
+    if (hit.distance >= K.HOVER_DISTANCE) {
+      state.grounded[i] = false;
+      state.hoverDistances[i] = K.HOVER_DISTANCE;
+      continue;
     }
 
     // Velocity of this wheel point, including the body's rotation about it.
