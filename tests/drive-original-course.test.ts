@@ -90,6 +90,26 @@ describe('the original course', () => {
     expect(grounded).toBeGreaterThan(50);
   });
 
+  it('runs the real course identically twice', () => {
+    // The replay suite proves determinism on a flat plane. The track is
+    // 20,276 triangles scanned by index, and the probe is the one thing in
+    // the loop that reads them, so it is the part that could quietly stop
+    // being reproducible.
+    const run = () => {
+      const { world, colliders } = startTheRace();
+      const trace: string[] = [];
+      for (let tick = 0; tick < 200; tick++) {
+        world.step(DRIVE);
+        if (world.race.segment !== 0) colliders.setActive(world.race.segment);
+        if (tick % 10 === 0) {
+          trace.push(JSON.stringify(world.snapshot()));
+        }
+      }
+      return trace;
+    };
+    expect(run()).toEqual(run());
+  });
+
   it('ends the run when the car drives off the course', () => {
     // The fall rule has been in the simulation since the slice course and was
     // unreachable there, because that course was flat at z = 0. On real

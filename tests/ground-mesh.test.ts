@@ -68,18 +68,16 @@ describe('castDownMesh', () => {
     expect(hit?.effectId).toBe(4);
   });
 
-  it('stays finite on a ray nearly parallel to the triangle plane', () => {
+  it('returns null for an exactly vertical triangle', () => {
+    // Math.fround collapses 11000.000001 to 11000, so this triangle really is
+    // vertical: the determinant is exactly zero and the answer must be a
+    // refusal, not a NaN dressed up as a distance.
     const f = Math.fround;
     const m = mesh(
       [[f(-1), f(11000), f(-1), f(1), f(11000), f(-1), f(0), f(11000.000001), f(1)]],
       [6],
     );
-    const hit = castDownMesh(m, vec3(0, 11000, 0.5), 1, 0, 1);
-    if (hit !== null) {
-      expect(Number.isFinite(hit.distance)).toBe(true);
-      expect(Number.isFinite(hit.point.x)).toBe(true);
-      expect(Number.isFinite(hit.point.z)).toBe(true);
-    }
+    expect(castDownMesh(m, vec3(0, 11000, 0.5), 1, 0, 1)).toBeNull();
   });
 
   it('measures the same distance at the far end of the course', () => {
@@ -98,6 +96,38 @@ describe('castDownMesh', () => {
     const m = mesh([first!, first!], [3, 9]);
     for (let run = 0; run < 3; run++) {
       expect(castDownMesh(m, vec3(0, 150, 0.5), 1, 0, 2)?.effectId).toBe(3);
+    }
+  });
+
+  it('answers with the nearest triangle, not the last one scanned', () => {
+    // Segments 4 and 31 of the real course carry geometry stacked in depth,
+    // live road with more live surface beneath it. Nearest-wins is the only
+    // thing stopping the probe reporting the floor under the road.
+    const m = mesh([...quadAt(0, 150, 0), ...quadAt(0, 150, 0.4)], [2, 2, 9, 9]);
+    const hit = castDownMesh(m, vec3(0, 150, 1), 2, 0, 4);
+    expect(hit?.effectId).toBe(9);
+    expect(hit?.distance).toBeCloseTo(0.6, 5);
+  });
+
+  it('answers with the nearest triangle whichever order they are in', () => {
+    const m = mesh([...quadAt(0, 150, 0.4), ...quadAt(0, 150, 0)], [9, 9, 2, 2]);
+    expect(castDownMesh(m, vec3(0, 150, 1), 2, 0, 4)?.effectId).toBe(9);
+  });
+
+  it('refuses a ray lying in a triangle plane rather than inventing a hit', () => {
+    // A near-vertical triangle with the ray almost in its plane: the
+    // determinant collapses and the intersection divides by it. The guard is
+    // relative to the edge lengths, so it means the same thing at y = 150 and
+    // at y = 11,000 - which a fixed epsilon would not.
+    const steep = (y: number): readonly (readonly number[])[] => [
+      [-1, y, -5, 1, y, -5, -1, y + 1e-7, 5],
+    ];
+    for (const y of [150, 11000]) {
+      const hit = castDownMesh(mesh(steep(y), [6]), vec3(0, y, 0), 1000, 0, 1);
+      if (hit !== null) {
+        expect(Number.isFinite(hit.distance), `y=${y}`).toBe(true);
+        expect(hit.distance, `y=${y}`).toBeLessThanOrEqual(1000);
+      }
     }
   });
 

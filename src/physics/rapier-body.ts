@@ -85,8 +85,9 @@ export class RapierWorld {
    * enables and disables these as the car changes segment, mirroring
    * `doM5ChangeSegment`: exactly one is live at a time.
    *
-   * The arrays are `GroundMesh`'s own, so the probe and the physics read the
-   * same triangles without a copy.
+   * The arrays are in `GroundMesh`'s own shape. `SegmentColliders` copies each
+   * segment out before calling this, because Rapier wants a self-contained
+   * mesh; what is shared is the layout, not the buffer.
    */
   addTrimesh(positions: Float32Array, indices: Uint32Array): RAPIER.Collider {
     const body = this.world.createRigidBody(this.rapier.RigidBodyDesc.fixed());

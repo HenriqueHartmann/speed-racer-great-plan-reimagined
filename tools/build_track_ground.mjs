@@ -91,6 +91,43 @@ if (parentOf.get(gltf.nodes.indexOf(spawnNode)) !== rootIndex) {
   throw new Error('carPos_Mach5 is not a direct child of SceneRoot');
 }
 
+// --- verify the sub-mesh identity, because the surface table rests on it -----
+//
+// `surfaceIds` below is the primitive's position in its mesh, and the whole
+// recovered surface table assumes that position means the same material in
+// every segment. That is measured, not given: all 37 segments carry exactly 16
+// primitives and primitive N holds the same material in all of them.
+//
+// Nothing downstream can notice if a future decode breaks it - a segment with
+// 15 primitives would shift every id after the gap and silently turn ice into
+// snow - so it is checked here, where it can still be shouted about.
+
+const materialsByPosition = segs[0].n.mesh === undefined
+  ? []
+  : gltf.meshes[segs[0].n.mesh].primitives.map((p) =>
+      p.material === undefined ? '(none)' : (gltf.materials[p.material].name ?? '(unnamed)'),
+    );
+
+for (const { n } of segs) {
+  const prims = gltf.meshes[n.mesh].primitives;
+  if (prims.length !== materialsByPosition.length) {
+    throw new Error(
+      `${n.name} has ${prims.length} sub-meshes, not ${materialsByPosition.length}: the sub-mesh index cannot be a surface id`,
+    );
+  }
+  prims.forEach((p, i) => {
+    const name = p.material === undefined ? '(none)' : (gltf.materials[p.material].name ?? '(unnamed)');
+    if (name !== materialsByPosition[i]) {
+      throw new Error(
+        `${n.name} sub-mesh ${i + 1} is ${name}, but it is ${materialsByPosition[i]} elsewhere: the surface ids are not stable`,
+      );
+    }
+    if (p.mode !== undefined && p.mode !== 4) {
+      throw new Error(`${n.name} sub-mesh ${i + 1} is primitive mode ${p.mode}, not triangles`);
+    }
+  });
+}
+
 // --- collect the triangles --------------------------------------------------
 
 const positions = [];
@@ -105,7 +142,10 @@ for (const { n } of segs) {
 
   gltf.meshes[n.mesh].primitives.forEach((prim, p) => {
     const pos = accessor(prim.attributes.POSITION);
-    const idx = prim.indices !== undefined ? accessor(prim.indices) : pos.map((_, i) => i / 3 | 0);
+    if (prim.indices === undefined) {
+      throw new Error(`${n.name} has a non-indexed primitive; this converter does not handle one`);
+    }
+    const idx = accessor(prim.indices);
     const base = positions.length / 3;
 
     for (let v = 0; v < pos.length; v += 3) {

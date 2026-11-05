@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseGroundMesh } from '../src/sim/ground-mesh.js';
+import { Glb } from './glb.js';
 
 const FILE = 'public/models/track-ground.bin';
 
@@ -101,6 +102,41 @@ describe('the decoded track', () => {
       }
       expect(lo).toBeGreaterThanOrEqual(s * 300 - 2.1);
       expect(hi).toBeLessThanOrEqual((s + 1) * 300 + 1.4);
+    }
+  });
+});
+
+describe('the sub-mesh identity the surface table rests on', () => {
+  // `surfaceIds` is a primitive's position in its mesh, and the recovered
+  // surface table reads that position as a material. That only works because
+  // every segment carries the same primitives in the same order - which is
+  // measured, not given. `tools/build_track_ground.mjs` refuses to build
+  // without it; this says so in the suite as well.
+  const glb = new Glb('public/models/track.glb');
+  const segments = glb.json.nodes
+    .filter((n: { name?: string }) => /^SEG_\d+$/.test(n.name ?? ''))
+    .sort((a: { name: string }, b: { name: string }) => Number(a.name.slice(4)) - Number(b.name.slice(4)));
+
+  const materialsOf = (node: { mesh: number }): string[] =>
+    glb.json.meshes[node.mesh].primitives.map(
+      (p: { material?: number }) => glb.json.materials[p.material!].name as string,
+    );
+
+  it('gives every segment the same 16 sub-meshes in the same order', () => {
+    const first = materialsOf(segments[0]);
+    expect(first).toHaveLength(16);
+    for (const seg of segments) expect(materialsOf(seg), seg.name).toEqual(first);
+  });
+
+  it('puts the three unhandled ids on the three non-drivable materials', () => {
+    // This is the evidence the whole mapping rests on: `doMach5`'s table has
+    // no 5, 11 or 16, and those are exactly the rocks and the trees. One
+    // chance in 560 if the id were anything but the sub-mesh index.
+    const materials = materialsOf(segments[0]);
+    const unhandled = [5, 11, 16].map((i) => materials[i - 1]);
+    expect(unhandled).toEqual(['ROCK_bROWN', 'ROCK_bLUE', 'TREE']);
+    for (const [id, name] of [[3, 'GRASS'], [4, 'ROAD_Dirt'], [12, 'SAND_UNDERWATER'], [14, 'ROAD_BlueIce']] as const) {
+      expect(materials[id - 1], `id ${id}`).toBe(name);
     }
   });
 });

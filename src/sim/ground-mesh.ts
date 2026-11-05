@@ -10,7 +10,10 @@
  *
  * Determinism is a requirement here, not a hope. Two runs of the same inputs
  * must choose the same triangle, so the scan is in index order, the nearest
- * hit wins, and an exact tie keeps the hit already held - the lower index.
+ * hit wins, and an exact tie keeps the hit already held - within one scan,
+ * the lower index. `Track.castDown` runs two scans at a seam and keeps the
+ * first strictly-nearer hit, so a tie there keeps the car's own segment
+ * rather than the lower index. Both are fixed; neither depends on timing.
  */
 
 import * as K from './constants.js';
@@ -20,8 +23,9 @@ import { vec3, type GroundHit, type Vec3 } from './vehicle.js';
  * Triangles with a surface id each, grouped into segments.
  *
  * Flat typed arrays rather than objects: this is read four times a tick, and
- * it is also exactly what a Rapier trimesh collider wants, so the same buffers
- * serve the probe and the physics without a copy.
+ * it is the shape a Rapier trimesh collider takes. `SegmentColliders` still
+ * copies each segment out, because Rapier wants a self-contained mesh with its
+ * own vertex numbering - the shared shape saves the conversion, not the copy.
  */
 export interface GroundMesh {
   /** Vertex positions, three floats each. */
@@ -40,15 +44,22 @@ export interface GroundMesh {
  * How near-parallel a ray may be to a triangle's plane before the intersection
  * is refused.
  *
- * It is relative, and it has to be. Positions run to 11,092 and are stored as
- * `float32`, whose spacing at that magnitude is about 1e-3, so any fixed
- * absolute epsilon is either unreachable or wildly too coarse depending on
- * where in the course you stand. Comparing the determinant against the edge
- * lengths that produced it compares like with like at every scale.
+ * It is relative so that it means the same thing for a triangle of any size:
+ * the determinant is built from the two edge vectors, so comparing it against
+ * their lengths is comparing like with like. (An earlier version of this
+ * comment argued from the coordinate magnitudes instead - positions reaching
+ * 11,092 in float32 - which is the wrong quantity: the edges are differences,
+ * and run 1 to 100 units, not 1e4.)
  *
- * It is not there to reject bad data: the decoded track has no degenerate
- * triangles at all, the smallest area across 18,725 being 6.886e-3. It is
- * there because a ray lying in a triangle's plane divides by zero.
+ * It is **defensive, and currently unobservable.** The decoded track has no
+ * degenerate triangles - the smallest area across 18,725 is 6.886e-3 - and the
+ * ratio this tests has a clean gap in the real data: 55 triangles at exactly
+ * zero, nothing until 1e-5, then 1e-3 and up. Deleting the guard, or replacing
+ * it with a coarse absolute epsilon, passes the whole suite, because a zero
+ * determinant already leaves via the NaN comparisons at the end. So no test
+ * here pins it, and that is stated rather than implied: it stands because a
+ * ray lying in a triangle's plane divides by zero, not because anything
+ * currently catches it doing so.
  */
 const EPS_REL = 1e-7;
 

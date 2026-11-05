@@ -59,10 +59,16 @@ The whole course runs Y 0 – 11,092.5 and the drivable surface is **20,276
 triangles**, a small fraction of the 67,527.
 
 The fit is close but not exact, and the slack matters. Nine of the 37 segments
-spill past their nominal slice — at most **+1.30 units past the end** and
-starting at most **2.02 units early**. That is why the original consults a
-neighbour within 2 units of a seam (`pSEGpart >= 298` / `<= 2`): the window is
-sized for this bleed, not chosen round. (CONFIRMED by measurement.)
+spill past the end of their nominal slice, by at most **+1.30 units**, and
+fourteen start before it, by at most **2.015**. That is what the original's
+2-unit seam window (`pSEGpart >= 298` / `<= 2`) is for. (CONFIRMED by
+measurement.)
+
+The window is *almost* wide enough. Segment 3 begins 2.015 units early, so a
+wheel in `y ∈ [597.985, 598.0)` finds no ground: the window is 2.0. The
+original misses it too — `integer(597.985)/300 + 1 = 2`, `pSEGpart = 2.015`,
+which fails `<= 2` — so this is a faithful port of a 15-millimetre hole in the
+road rather than a porting bug. Worth knowing before someone re-derives it.
 
 `FINISH_Y = 10921` is RECOVERED from `doFinish` and sits inside `SEG_37`, whose
 live surface ends at 11,092.5. It is a coordinate the race rules test, **not a
@@ -142,7 +148,8 @@ RECOVERED, which in this codebase means the value was read from a handler.
 Sub-mesh indices are only usable as IDs if all 16 exist everywhere, and they do:
 each segment pads the groups it does not use with a **parked patch at z = −20**,
 far under the course. The patch is usually 2 triangles but not always — `SEG_4`,
-`SEG_5` and `SEG_6` carry 10 — so nothing may assume a fixed size. Across the
+`SEG_5` and `SEG_6` carry 10 — so nothing may assume a fixed size, and some
+carry a vertex as high as z = 0.469, so they are not reliably flat either. Across the
 drivable groups there are 1,163 parked triangles against 9,568 of live road.
 (CONFIRMED by measurement.)
 
@@ -386,13 +393,32 @@ and belongs with the water step.
 ## Risks
 
 - **The hover ray is 1.0 long and the car rests 0.903 above the road**, so only
-  0.097 of margin. Measured rather than assumed: across the 10,731 triangles of
-  drivable surface, **94% lie under 10° and 99.9% under 30°**. Just 14 exceed
-  30°, and the steepest, 89.7° in `SEG_31` sub-mesh 12, is `SAND_UNDERWATER` —
-  a wall of an underwater section, not something driven along. On a steady grade
-  the chassis tilts to match and the distance holds; the exposure is a sharp
-  *change* of grade, not grade itself. Low risk, but worth one test at the
-  steepest road triangle.
+  0.097 of margin. The first version of this entry got the numbers and the
+  reasoning wrong, and both are corrected here.
+
+  *The numbers.* It said "94% of the drivable surface lies under 10°, 14
+  triangles exceed 30°" from a set that silently **excluded grass**. Counted
+  three ways: road, dirt and ice only — 8,915 live triangles, **6 above 25.5°**;
+  the set the original sentence used — 9,568 live, 14 above 30°; everything
+  drivable including the grass verges — 17,910 live, **314 above 30°**. The
+  steep geometry is overwhelmingly verge and rock; the road itself is nearly
+  flat.
+
+  *The reasoning.* It said "on a steady grade the chassis tilts to match and the
+  distance holds". That is true of a ray cast along the chassis's own down axis,
+  which is what `doMach5` does — `worldDownDir = tempTrans * pLocalDown`. Ours
+  is cast **world-down**: `GroundProbe.castDown` takes no direction and
+  `castDownMesh` hardcodes `(0, 0, −1)`. `updateHover` even computes the chassis
+  down vector and discards it (`void down`), which predates this work.
+
+  So on a grade θ the measured distance is the true one divided by cos θ, and
+  the ray stops reaching at θ ≈ 25.5°; at 20° the suspension sits about 20%
+  softer than it should. On a banked curve the spring pushes straight up rather
+  than perpendicular to the road. **Six road triangles exceed 25.5°**, so the
+  exposure on this course is small — but it is a real divergence from the
+  original, it was inherited rather than introduced, and this is the step that
+  put the car on terrain where it means anything. Giving `GroundProbe` a
+  direction is its own piece of work.
 - **Falling off.** The original has a cliff game-over at `chassisPos.z <= -10`
   with `pTrackFace = 99`; we have no equivalent, so driving off the mesh will
   need defined behaviour even though the cliff rule itself is out of scope.

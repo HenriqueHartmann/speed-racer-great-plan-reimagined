@@ -58,8 +58,9 @@ describe('segment indexing', () => {
 
 describe('the ground query', () => {
   it('finds ground exactly on a seam', () => {
-    // y = 300 belongs to segment 2 by segmentIndexFor, but the geometry under
-    // it may be filed in either. The original consulted both within 2 units.
+    // A flat mesh tiles its segments exactly, so segment 2 answers for itself
+    // here. The cases where the seam window is what finds the road at all are
+    // in 'the seam window' below.
     const track = new Track({ ground: flatGroundMesh(3) });
     expect(track.castDown(vec3(0, 300, 0.5), 1)).not.toBeNull();
   });
@@ -84,6 +85,62 @@ describe('the ground query', () => {
   it('still caps at the 37 slots the original pre-sized', () => {
     const track = new Track({ ground: flatGroundMesh(100) });
     expect(track.segments.length).toBe(K.SEGMENT_SLOTS);
+  });
+});
+
+describe('the seam window', () => {
+  /** A mesh whose segments each span exactly the y range given. */
+  function segmented(ranges: readonly (readonly [number, number])[], ids: readonly number[]) {
+    const positions: number[] = [];
+    const indices: number[] = [];
+    const surfaceIds: number[] = [];
+    const segmentStart = new Uint32Array(ranges.length);
+    const segmentEnd = new Uint32Array(ranges.length);
+
+    ranges.forEach(([y0, y1], s) => {
+      segmentStart[s] = indices.length / 3;
+      const base = positions.length / 3;
+      positions.push(-10, y0, 0, 10, y0, 0, 10, y1, 0, -10, y1, 0);
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      surfaceIds.push(ids[s]!, ids[s]!);
+      segmentEnd[s] = indices.length / 3;
+    });
+
+    return {
+      positions: new Float32Array(positions),
+      indices: new Uint32Array(indices),
+      surfaceIds: new Uint8Array(surfaceIds),
+      segmentStart,
+      segmentEnd,
+      segmentCount: ranges.length,
+    };
+  }
+
+  it('looks back when the previous segment overruns the boundary', () => {
+    // Segment 1 reaches to 301 and segment 2 only starts there. A wheel at
+    // 300.5 is in segment 2 by segmentIndexFor, and the road under it is
+    // segment 1's. Nine of the 37 real segments overrun like this.
+    const track = new Track({ ground: segmented([[0, 301], [301, 600]], [2, 4]) });
+    expect(track.castDown(vec3(0, 300.5, 0.5), 1)?.effectId).toBe(2);
+  });
+
+  it('looks forward when the next segment underruns the boundary', () => {
+    // The mirror case, and the one the suite never covered: segment 2 starts
+    // at 298, before its own slice. Fourteen of the 37 real segments do this,
+    // reaching back up to 2.015 units.
+    const track = new Track({ ground: segmented([[0, 298], [298, 600]], [2, 4]) });
+    expect(track.castDown(vec3(0, 299, 0.5), 1)?.effectId).toBe(4);
+  });
+
+  it('takes the nearer of the two candidates, not the later one', () => {
+    // Both segments have surface under the wheel at different heights. The
+    // car stands on the nearer one whichever order they are consulted in.
+    const ground = segmented([[0, 400], [250, 600]], [2, 4]);
+    for (let i = 0; i < ground.positions.length; i += 3) {
+      if (i >= 12) ground.positions[i + 2] = -0.4; // sink segment 2
+    }
+    const track = new Track({ ground });
+    expect(track.castDown(vec3(0, 299, 0.5), 1)?.effectId).toBe(2);
   });
 });
 
