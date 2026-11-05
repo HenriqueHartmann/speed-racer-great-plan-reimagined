@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { isDrawnTrackNode } from './model-frame.js';
+import { trackNodeRole } from './model-frame.js';
 import { clearYUpConversion } from './scene-root.js';
 
 export const TRACK_MODEL_URL = 'models/track.glb';
@@ -36,7 +36,7 @@ export function applyTrackVisibility(scene: THREE.Object3D): { drawn: number; hi
   let hidden = 0;
 
   for (const node of root.children) {
-    if (isDrawnTrackNode(node.name)) {
+    if (trackNodeRole(node.name) === 'drawn') {
       node.visible = true;
       node.traverse((child) => {
         const mesh = child as THREE.Mesh;

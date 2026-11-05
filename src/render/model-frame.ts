@@ -238,3 +238,32 @@ export const GADGET_NODES = {
 export function isDrawnTrackNode(name: string): boolean {
   return /^SEG_\d+$/.test(name);
 }
+
+/**
+ * What the renderer does with a node of the decoded level.
+ *
+ * `PREP` gives the three solid kinds different treatment and the renderer has
+ * to follow it, so one boolean is no longer enough:
+ *
+ *   - `WALL_` is drawn and solid (`PREP:438`, `visibility = #front`)
+ *   - `INV_` is **solid and unseen** (`PREP:452`, `visibility = #none`) - the
+ *     out-of-bounds fences
+ *   - `RAIL_` is drawn and solid, double-sided (`PREP:326`, `#both`)
+ *   - `MISC_` is drawn and **inert**: no branch of `PREP`'s dispatcher matches
+ *     `"MIS"` at all, so those 23 models get no body and no modifier. Scenery.
+ *
+ * Whether a node is *solid* is not this function's business - that comes from
+ * `track-solids.bin`, which carries only the first three. This decides what is
+ * seen. Everything else is hidden until its own step: trees, pickups, water,
+ * the sky, the racing line.
+ *
+ * The zero-padding in this file is inconsistent - `MISC_1` beside `MISC_08`,
+ * `Tree_01` beside `Tree_388` - so the patterns accept any run of digits.
+ */
+export type TrackNodeRole = 'drawn' | 'hidden';
+
+const DRAWN = /^(SEG|WALL|RAIL|MISC)_\d+$/;
+
+export function trackNodeRole(name: string): TrackNodeRole {
+  return DRAWN.test(name) ? 'drawn' : 'hidden';
+}

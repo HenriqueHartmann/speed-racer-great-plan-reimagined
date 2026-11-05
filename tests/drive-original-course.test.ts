@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { initRapier, RapierWorld, RapierChassis } from '../src/physics/rapier-body.js';
 import { SegmentColliders } from '../src/physics/segment-colliders.js';
-import { parseGroundMesh } from '../src/sim/ground-mesh.js';
+import { parseGroundMesh, parseSolidMesh } from '../src/sim/ground-mesh.js';
 import { Track } from '../src/sim/track.js';
 import { World } from '../src/sim/world.js';
 import { NO_INPUT, vec3, type VehicleInput } from '../src/sim/vehicle.js';
@@ -23,12 +23,16 @@ beforeAll(async () => {
 });
 
 /** The whole stack, started at the original's own start line. */
-function startTheRace() {
+function startTheRace(withBarriers = false) {
   const ground = parseGroundMesh(readFileSync('public/models/track-ground.bin'));
   const track = new Track({ ground });
   const host = new RapierWorld(rapier);
   const colliders = new SegmentColliders(host, ground);
   colliders.setActive(1);
+  const barriers = withBarriers
+    ? new SegmentColliders(host, parseSolidMesh(readFileSync('public/models/track-solids.bin')))
+    : null;
+  barriers?.setActive(1);
 
   const road = track.castDown(vec3(ground.spawn.x, ground.spawn.y, ground.spawn.z), 60);
   const start = vec3(
@@ -44,7 +48,7 @@ function startTheRace() {
     track,
     stepPhysics: () => host.step(),
   });
-  return { world, chassis, colliders, ground, road };
+  return { world, chassis, colliders, barriers, ground, road };
 }
 
 describe('the original course', () => {
@@ -151,11 +155,29 @@ describe('the original course', () => {
     expect(build[2]).toBeCloseTo(K.TURN_BUILD_CAP, 2);
   });
 
+  it('is held on the course by the barriers at the first bend', () => {
+    // Without them the car drives straight into the bend at y 150 and falls -
+    // the test below still pins that, because it runs without barriers. The
+    // level's fences are what make the corridor a corridor.
+    const { world, colliders, barriers } = startTheRace(true);
+    for (let tick = 0; tick < 300; tick++) {
+      world.step(DRIVE);
+      if (world.race.segment !== 0) {
+        colliders.setActive(world.race.segment);
+        barriers!.setActive(world.race.segment);
+      }
+      if (world.race.outcome !== 'running') break;
+    }
+
+    expect(world.race.outcome).toBe('running');
+  });
+
   it('ends the run when the car drives off the course', () => {
     // The fall rule has been in the simulation since the slice course and was
     // unreachable there, because that course was flat at z = 0. On real
     // geometry it finally means something: drive straight into the first bend
     // and the car leaves the road and the run ends.
+    // Deliberately without barriers: this pins the fall rule itself.
     const { world, colliders } = startTheRace();
     for (let tick = 0; tick < 300; tick++) {
       world.step(DRIVE);

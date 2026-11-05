@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { Glb } from './glb.js';
 import * as THREE from 'three';
-import { isDrawnTrackNode } from '../src/render/model-frame.js';
+import { isDrawnTrackNode, trackNodeRole } from '../src/render/model-frame.js';
 import { applyTrackVisibility } from '../src/render/track-view.js';
 
 describe('isDrawnTrackNode', () => {
@@ -25,7 +25,7 @@ describe('isDrawnTrackNode', () => {
   });
 
   it('leaves the positioning nodes and the props out', () => {
-    for (const name of ['SceneRoot', 'carPos_Mach5', 'path_01', 'path_209', 'Tree_1', 'INV_1', 'WALL_1', 'pickup_Wrench01']) {
+    for (const name of ['SceneRoot', 'carPos_Mach5', 'path_01', 'path_209', 'Tree_01', 'pickup_Wrench01']) {
       expect(isDrawnTrackNode(name), name).toBe(false);
     }
   });
@@ -53,6 +53,41 @@ describe('isDrawnTrackNode', () => {
  * Testing the rule against the names in the GLB's JSON passed while the road
  * did not render at all. This builds the shape the loader actually hands over.
  */
+describe('trackNodeRole', () => {
+  // `PREP` gives these three different treatment and the renderer has to
+  // follow it: a wall is drawn and solid, an invisible fence is solid and
+  // unseen (`PREP:452` sets `visibility = #none`), and MISC_ is drawn and
+  // inert - no branch of the dispatcher matches "MIS" at all.
+  it('draws the road, the walls, the rail and the scenery', () => {
+    for (const name of ['SEG_1', 'SEG_37', 'WALL_8', 'RAIL_20', 'MISC_1', 'MISC_08']) {
+      expect(trackNodeRole(name), name).toBe('drawn');
+    }
+  });
+
+  it('hides the invisible fences, which are solid all the same', () => {
+    for (const name of ['INV_1', 'INV_37']) {
+      expect(trackNodeRole(name), name).toBe('hidden');
+    }
+  });
+
+  it('hides everything that is not this step', () => {
+    for (const name of ['Tree_01', 'pickup_Robot03', 'path_01', 'carPos_Mach5', 'WATER_34', 'Sphere01']) {
+      expect(trackNodeRole(name), name).toBe('hidden');
+    }
+  });
+
+  it('tolerates the file\'s inconsistent zero-padding', () => {
+    expect(trackNodeRole('MISC_1')).toBe('drawn');
+    expect(trackNodeRole('MISC_08')).toBe('drawn');
+    expect(trackNodeRole('WALL_8')).toBe('drawn');
+  });
+
+  it('does not accept a name that merely starts with a prefix', () => {
+    expect(trackNodeRole('WALL_8_extra')).toBe('hidden');
+    expect(trackNodeRole('INV_')).toBe('hidden');
+  });
+});
+
 describe('applyTrackVisibility', () => {
   function loaderShapedScene(): THREE.Object3D {
     const root = new THREE.Group();

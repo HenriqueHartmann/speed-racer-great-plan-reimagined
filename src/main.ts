@@ -29,10 +29,11 @@ import { Mach5 } from './render/mach5.js';
 import { TrackView } from './render/track-view.js';
 import { SegmentColliders } from './physics/segment-colliders.js';
 import { PropColliders } from './physics/prop-colliders.js';
-import { parseGroundMesh } from './sim/ground-mesh.js';
+import { parseGroundMesh, parseSolidMesh } from './sim/ground-mesh.js';
 import { OriginalMach5 } from './render/mach5-original.js';
 
 const TRACK_GROUND_URL = 'models/track-ground.bin';
+const TRACK_SOLIDS_URL = 'models/track-solids.bin';
 
 /** Driving keys are held; gadget keys are edge-triggered. */
 type DriveKey = 'forward' | 'backward' | 'left' | 'right';
@@ -142,8 +143,15 @@ async function main(): Promise<void> {
   // One solid segment at a time, as doM5ChangeSegment kept it. The hover ray
   // consults two at a seam; the collider never does.
   const segmentColliders = new SegmentColliders(host, ground);
+
+  // The level's barriers - walls, invisible fences, the rail - on the same
+  // rule. MISC_ is not among them: PREP has no branch for it, so those 23
+  // models are scenery and stay drawn and inert.
+  const solids = parseSolidMesh(new Uint8Array(await (await fetch(TRACK_SOLIDS_URL)).arrayBuffer()));
+  const solidColliders = new SegmentColliders(host, solids);
   let solidSegment = 1;
   segmentColliders.setActive(solidSegment);
+  solidColliders.setActive(solidSegment);
 
 
   // Solid props, one segment tangible at a time, as doM5ChangeSegment kept
@@ -193,6 +201,7 @@ async function main(): Promise<void> {
     for (const seg of track.segments) for (const prop of seg.props) prop.active = true;
     for (const view of propViews.values()) view.visible = true;
     propColliders.setActive(solidSegment);
+    solidColliders.setActive(solidSegment);
   }
 
   const scene = createScene();
@@ -290,6 +299,7 @@ async function main(): Promise<void> {
     if (world.race.segment !== solidSegment) {
       solidSegment = world.race.segment;
       segmentColliders.setActive(solidSegment);
+      solidColliders.setActive(solidSegment);
       propColliders.setActive(solidSegment);
     }
 

@@ -15,7 +15,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { initRapier, RapierWorld } from '../src/physics/rapier-body.js';
 import { SegmentColliders } from '../src/physics/segment-colliders.js';
-import { flatGroundMesh, parseGroundMesh } from '../src/sim/ground-mesh.js';
+import { flatGroundMesh, parseGroundMesh, parseSolidMesh } from '../src/sim/ground-mesh.js';
 import { Track } from '../src/sim/track.js';
 import { vec3 } from '../src/sim/vehicle.js';
 import * as K from '../src/sim/constants.js';
@@ -56,6 +56,66 @@ describe('segment colliders', () => {
     colliders.setActive(99);
     // Out of range leaves the last good one standing rather than going dark.
     expect(colliders.isEnabled(1)).toBe(true);
+  });
+});
+
+describe('the level barriers', () => {
+  it('holds exactly one segment of barrier solid, like the road', () => {
+    const host = new RapierWorld(rapier);
+    const solids = parseSolidMesh(readFileSync('public/models/track-solids.bin'));
+    const colliders = new SegmentColliders(host, solids);
+
+    colliders.setActive(1);
+    expect([1, 2, 3].map((s) => colliders.isEnabled(s))).toEqual([true, false, false]);
+    colliders.setActive(2);
+    expect([1, 2, 3].map((s) => colliders.isEnabled(s))).toEqual([false, true, false]);
+  });
+
+  it('stops a body driven into a barrier face', () => {
+    // A fence is vertical, so dropping something on it proves nothing. Take a
+    // real triangle of segment 1's barrier, stand off along its normal and
+    // push into it: the barrier has to be there.
+    const solids = parseSolidMesh(readFileSync('public/models/track-solids.bin'));
+    const tri = solids.segmentStart[0]!;
+    const v = [0, 1, 2].map((c) => {
+      const o = solids.indices[tri * 3 + c]! * 3;
+      return [solids.positions[o]!, solids.positions[o + 1]!, solids.positions[o + 2]!];
+    });
+    const centroid = [0, 1, 2].map((i) => (v[0]![i]! + v[1]![i]! + v[2]![i]!) / 3);
+    const e1 = [0, 1, 2].map((i) => v[1]![i]! - v[0]![i]!);
+    const e2 = [0, 1, 2].map((i) => v[2]![i]! - v[0]![i]!);
+    const n = [
+      e1[1]! * e2[2]! - e1[2]! * e2[1]!,
+      e1[2]! * e2[0]! - e1[0]! * e2[2]!,
+      e1[0]! * e2[1]! - e1[1]! * e2[0]!,
+    ];
+    const len = Math.hypot(...n);
+    const unit = n.map((c) => c / len);
+
+    const host = new RapierWorld(rapier);
+    const colliders = new SegmentColliders(host, solids);
+    colliders.setActive(1);
+
+    const stand = 3;
+    const body = host.world.createRigidBody(
+      rapier.RigidBodyDesc.dynamic()
+        .setTranslation(
+          centroid[0]! + unit[0]! * stand,
+          centroid[1]! + unit[1]! * stand,
+          centroid[2]! + unit[2]! * stand,
+        )
+        .setGravityScale(0)
+        .setLinvel(-unit[0]! * 20, -unit[1]! * 20, -unit[2]! * 20),
+    );
+    host.world.createCollider(rapier.ColliderDesc.ball(0.4), body);
+    host.track(body);
+    for (let tick = 0; tick < 60; tick++) host.step();
+
+    // Without the barrier it would be 20 units past the face by now.
+    const p = body.translation();
+    const past =
+      (p.x - centroid[0]!) * -unit[0]! + (p.y - centroid[1]!) * -unit[1]! + (p.z - centroid[2]!) * -unit[2]!;
+    expect(past).toBeLessThan(1);
   });
 });
 

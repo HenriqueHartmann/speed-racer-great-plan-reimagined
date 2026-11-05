@@ -90,6 +90,11 @@ echo "==> decoding the track"
 echo "==> building the ground data"
 node "$ROOT/tools/build_track_ground.mjs" "$OUT/track.glb" "$OUT/track-ground.bin"
 
+# 6. And the level's solid barriers - walls, invisible fences, the rail.
+#    MISC_ is deliberately not among them: PREP has no branch for it.
+echo "==> building the barriers"
+node "$ROOT/tools/build_track_solids.mjs" "$OUT/track.glb" "$OUT/track-solids.bin"
+
 echo
 echo "wrote:"
-sha256sum "$OUT/mach5.glb" "$OUT/track.glb" "$OUT/track-ground.bin"
+sha256sum "$OUT/mach5.glb" "$OUT/track.glb" "$OUT/track-ground.bin" "$OUT/track-solids.bin"

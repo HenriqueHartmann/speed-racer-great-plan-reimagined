@@ -169,8 +169,9 @@ export function flatGroundMesh(segments: number, halfWidth = 18, effectId = 1): 
   return { positions, indices, surfaceIds, segmentStart, segmentEnd, segmentCount: segments };
 }
 
-/** `"SRTG"`, little-endian, as the generator writes it. */
+/** `"SRTG"` (ground) and `"SRTP"` (solid props), little-endian. */
 const MAGIC = 0x47_54_52_53;
+const MAGIC_SOLIDS = 0x50_54_52_53;
 const VERSION = 1;
 /** Header: magic, version, three counts, then the spawn point. */
 const HEADER_BYTES = 32;
@@ -188,13 +189,36 @@ const HEADER_BYTES = 32;
  * it the same type without a cast.
  */
 export function parseGroundMesh(bytes: Uint8Array): GroundMesh & { spawn: Vec3 } {
-  if (bytes.byteLength < HEADER_BYTES) throw new Error('ground data truncated: no header');
+  return parseSegmentedMesh(bytes, MAGIC, 'ground data');
+}
+
+/**
+ * Read `public/models/track-solids.bin`, the level's barriers.
+ *
+ * Same shape as the ground: one triangle range per segment, a surface id per
+ * triangle. Here the id names the barrier rather than the material - 1 wall,
+ * 2 invisible fence, 3 rail - because the renderer has to draw the first and
+ * the third and not the second.
+ *
+ * The header's spawn slot is unused and zeroed, so that both files share one
+ * parser rather than growing a second nearly-identical one.
+ */
+export function parseSolidMesh(bytes: Uint8Array): GroundMesh {
+  return parseSegmentedMesh(bytes, MAGIC_SOLIDS, 'solid data');
+}
+
+function parseSegmentedMesh(
+  bytes: Uint8Array,
+  magic: number,
+  what: string,
+): GroundMesh & { spawn: Vec3 } {
+  if (bytes.byteLength < HEADER_BYTES) throw new Error(`${what} truncated: no header`);
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint32(0, true) !== MAGIC) throw new Error('ground data: bad magic');
+  if (view.getUint32(0, true) !== magic) throw new Error(`${what}: bad magic`);
 
   const version = view.getUint32(4, true);
-  if (version !== VERSION) throw new Error(`ground data: unsupported version ${version}`);
+  if (version !== VERSION) throw new Error(`${what}: unsupported version ${version}`);
 
   const segmentCount = view.getUint32(8, true);
   const triangleCount = view.getUint32(12, true);
@@ -207,9 +231,7 @@ export function parseGroundMesh(bytes: Uint8Array): GroundMesh & { spawn: Vec3 }
   const expected =
     HEADER_BYTES + vertexCount * 12 + triangleCount * 12 + idsPadded + segmentCount * 8;
   if (bytes.byteLength !== expected) {
-    throw new Error(
-      `ground data: size ${bytes.byteLength} does not match its counts, which need ${expected}`,
-    );
+    throw new Error(`${what}: size ${bytes.byteLength} does not match its counts, which need ${expected}`);
   }
 
   let at = bytes.byteOffset + HEADER_BYTES;
@@ -224,24 +246,24 @@ export function parseGroundMesh(bytes: Uint8Array): GroundMesh & { spawn: Vec3 }
   const segmentEnd = new Uint32Array(bytes.buffer, at, segmentCount);
 
   for (let i = 0; i < positions.length; i++) {
-    if (!Number.isFinite(positions[i]!)) throw new Error(`ground data: coordinate ${i} is not finite`);
+    if (!Number.isFinite(positions[i]!)) throw new Error(`${what}: coordinate ${i} is not finite`);
   }
   for (let i = 0; i < indices.length; i++) {
     if (indices[i]! >= vertexCount) {
-      throw new Error(`ground data: index ${indices[i]} past the ${vertexCount} vertices`);
+      throw new Error(`${what}: index ${indices[i]} past the ${vertexCount} vertices`);
     }
   }
   if (segmentCount === 0 || segmentStart[0] !== 0) {
-    throw new Error('ground data: segment ranges must start at triangle 0');
+    throw new Error(`${what}: segment ranges must start at triangle 0`);
   }
   for (let s = 0; s < segmentCount; s++) {
-    if (segmentEnd[s]! < segmentStart[s]!) throw new Error(`ground data: segment ${s + 1} ends before it starts`);
+    if (segmentEnd[s]! < segmentStart[s]!) throw new Error(`${what}: segment ${s + 1} ends before it starts`);
     if (s + 1 < segmentCount && segmentEnd[s] !== segmentStart[s + 1]) {
-      throw new Error(`ground data: segment ${s + 1} does not meet segment ${s + 2}`);
+      throw new Error(`${what}: segment ${s + 1} does not meet segment ${s + 2}`);
     }
   }
   if (segmentEnd[segmentCount - 1] !== triangleCount) {
-    throw new Error('ground data: the segments do not account for every triangle');
+    throw new Error(`${what}: the segments do not account for every triangle`);
   }
 
   return { positions, indices, surfaceIds, segmentStart, segmentEnd, segmentCount, spawn };
