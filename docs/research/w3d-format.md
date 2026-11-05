@@ -98,13 +98,48 @@ returns them raw rather than guessing.
 
 ---
 
-## Mesh (`0x49`) — NOT DECODED
+## Model descriptor (`0x45`) — PARTIALLY DECODED
 
-The largest block type and the remaining obstacle. After the name there is a header beginning with
-a uint32 that correlates with mesh complexity (`0x68` for the collider, `0xff` for the car body),
-then what look like counts and offsets. Decoding this is the next step.
+```
+name       pstr
+unknown    uint32    always 4
+nSubmesh   uint32    1 for simple models; 9 for mach5_body, 8 for jacks and saw
+vertices   uint32
+faces      uint32
+unknown    uint32
+unknown    uint32    often faces/2, but not always
+...                  then: "default", shader name, model name, material name, floats
+```
 
-Until it is decoded, geometry cannot be converted to glTF.
+Vertex and face counts are confirmed against the simplest cases: `car_shadow` is 4 vertices and
+2 faces — a quad — and `scope_door` is 12 and 4. The collider is 104 vertices and 204 faces, whose
+Euler characteristic `V − E + F = 104 − 306 + 204 = 2` is exactly that of a closed surface. The
+same check fails on most other models, which is expected: game meshes are usually open.
+
+## Mesh payload (`0x49`) — NOT DECODED, and now bounded
+
+Every payload begins with the same shape: `04`, one byte in `0x00`–`0x07`, two bytes, then `00 00`.
+After that, three measurements rule out the easy interpretations:
+
+| Test | Result |
+|---|---|
+| Fixed bytes per vertex? | **No.** The ratio ranges from 2.57 to 396 across 24 meshes in one world |
+| Positions stored as `float32`? | **No.** A scan of all 132 payload bytes of `car_shadow` — a 4-vertex quad — found **zero** plausible float triples |
+| Entropy | **6.5–7.5 bits/byte**, with 13–46% zero bytes. Random and zlib-compressed data measure ~7.95, so this is **not** entropy-coded |
+| One payload per model? | **No.** `mach5_body` declares 50 vertices and 64 faces yet has **four** `0x49` blocks totalling 45,829 bytes |
+
+Taken together: the payload is a **variable-length bitstream of quantised values**, and the multiple
+blocks per model indicate **progressive mesh refinement** — the compressed progressive meshes that
+the Intel IFX lineage is known for. The descriptor's vertex and face counts therefore describe a
+base mesh, not the final geometry.
+
+**What this costs.** Decoding requires reconstructing the exact quantisation, the bit layout and the
+refinement operations. That is the upper end of the estimate recorded in `open-questions.md`
+(months, not weeks), and it is qualitatively harder than everything decoded so far: the container,
+the scene graph and the textures were all self-describing, and this is not.
+
+**What is not blocked by it.** Node names, hierarchy, transforms, materials, shaders, lights,
+cameras and all 50 textures are already recovered.
 
 ---
 
