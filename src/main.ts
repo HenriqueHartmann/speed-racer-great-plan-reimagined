@@ -57,6 +57,8 @@ export interface InputSource {
   readonly state: VehicleInput;
   /** Consume the gadget presses accumulated since the last tick. */
   takePresses(): GadgetId[];
+  /** True once per press of the restart key. */
+  takeRestart(): boolean;
 }
 
 function createInput(): InputSource {
@@ -68,9 +70,16 @@ function createInput(): InputSource {
     jacks: false,
   };
   let pending: GadgetId[] = [];
+  let restartPressed = false;
 
   addEventListener('keydown', (e) => {
     if (e.repeat) return;
+
+    if (e.code === 'KeyR') {
+      e.preventDefault();
+      restartPressed = true;
+      return;
+    }
 
     const drive = DRIVE_KEYS[e.code];
     if (drive) {
@@ -104,6 +113,11 @@ function createInput(): InputSource {
 
   return {
     state,
+    takeRestart: () => {
+      const taken = restartPressed;
+      restartPressed = false;
+      return taken;
+    },
     takePresses: () => {
       const taken = pending;
       pending = [];
@@ -130,6 +144,7 @@ async function main(): Promise<void> {
   let solidSegment = 1;
   segmentColliders.setActive(solidSegment);
 
+
   // Solid props get a static collider so they stop the car. Pickups do not:
   // they are collected by the simulation's overlap test and must not block.
   const propColliders = new Map<number, ReturnType<typeof host.addStaticBox>>();
@@ -151,14 +166,32 @@ async function main(): Promise<void> {
     (road ? ground.spawn.z - road.distance : ground.spawn.z) + K.SPAWN_HEIGHT,
   );
   const chassis = new RapierChassis(rapier, host, start);
-  const world = new World({
-    seed: 0x5eed_1234,
-    body: chassis,
-    // The track is the ground probe: it knows segments, surfaces and seams.
-    probe: track,
-    track,
-    stepPhysics: () => host.step(),
-  });
+  const newWorld = (): World =>
+    new World({
+      seed: 0x5eed_1234,
+      body: chassis,
+      // The track is the ground probe: it knows segments, surfaces and seams.
+      probe: track,
+      track,
+      stepPhysics: () => host.step(),
+    });
+
+  let world = newWorld();
+
+  /**
+   * Put the car back on the start line and begin again.
+   *
+   * The original has no in-place recovery: `doMach5:675` fades the sound and
+   * does `go("CLIFF")`, a game-over frame. This is the restart that frame
+   * leads to, and it exists because the real course has somewhere to fall off.
+   */
+  function restart(): void {
+    chassis.respawn(start);
+    world = newWorld();
+    solidSegment = 1;
+    segmentColliders.setActive(solidSegment);
+    for (const seg of track.segments) for (const prop of seg.props) prop.active = true;
+  }
 
   const scene = createScene();
 
@@ -239,6 +272,8 @@ async function main(): Promise<void> {
     // so holding a key cannot re-fire a gadget and a fast frame cannot drop one.
     let presses = input.takePresses();
 
+    if (input.takeRestart()) restart();
+
     let stepped = 0;
     while (accumulator >= K.TICK_DT && stepped < MAX_CATCHUP_TICKS) {
       world.step({ ...input.state, gadgetPresses: presses });
@@ -298,7 +333,8 @@ async function main(): Promise<void> {
     renderer.render(scene, chase.camera);
 
     const surface = v.surface.inferredName;
-    const outcome = r.outcome === 'running' ? '' : `   — ${r.outcome.toUpperCase()}`;
+    const outcome =
+      r.outcome === 'running' ? '' : `   — ${r.outcome.toUpperCase()}, press R to restart`;
 
     const gadgetLine = GADGETS.map((g) => {
       const st = v.gadgets[g.id];

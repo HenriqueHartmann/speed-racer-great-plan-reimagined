@@ -46,6 +46,46 @@ export interface VehicleViewState {
   wheelTurn: number;
 }
 
+/**
+ * Put the car where the chassis is, facing where it faces, leaning how it leans.
+ *
+ * Both car views used to keep only the heading - `rotation.set(0, 0, yaw)` -
+ * and ignore the `up` the simulation hands them. The simulation has always
+ * pitched and rolled: the suspension is four independent springs and the
+ * original self-rights in the air. On a flat strip there was nothing to see,
+ * and on a course that climbs from z -20 to +27 the car read as sliding along
+ * a level floor over the hills.
+ *
+ * The basis is rebuilt rather than trusted. Four springs do not keep `up`
+ * square to `forward`, and feeding a skewed pair straight into a matrix shears
+ * the bodywork.
+ */
+export function applyChassisOrientation(
+  object: THREE.Object3D,
+  position: Vec3,
+  forward: Vec3,
+  up: Vec3,
+): void {
+  object.position.set(position.x, position.y, position.z);
+
+  const f = new THREE.Vector3(forward.x, forward.y, forward.z);
+  const u = new THREE.Vector3(up.x, up.y, up.z);
+  if (f.lengthSq() < 1e-12 || u.lengthSq() < 1e-12) return;
+  f.normalize();
+  u.normalize();
+
+  // Right is forward x up in this Z-up frame: (0,1,0) x (0,0,1) = (1,0,0).
+  const right = new THREE.Vector3().crossVectors(f, u);
+  if (right.lengthSq() < 1e-12) return; // forward and up collinear; keep the last pose
+  right.normalize();
+  // Square `up` back up against the pair we trust.
+  u.crossVectors(right, f).normalize();
+
+  object.quaternion.setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(right, f, u),
+  );
+}
+
 /** A chase camera that trails the car, smoothed per rendered frame. */
 export class ChaseCamera {
   readonly camera: THREE.PerspectiveCamera;

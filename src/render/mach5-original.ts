@@ -34,6 +34,7 @@ import {
   type Vec3Like,
 } from './model-frame.js';
 import { clearYUpConversion } from './scene-root.js';
+import { applyChassisOrientation } from './scene.js';
 import type { VehicleView, VehicleViewState } from './scene.js';
 
 export const MACH5_MODEL_URL = 'models/mach5.glb';
@@ -209,11 +210,10 @@ export class OriginalMach5 implements VehicleView {
     };
   }
 
-  update(position: Vec3, forward: Vec3, _up: Vec3, state: VehicleViewState): void {
+  update(position: Vec3, forward: Vec3, up: Vec3, state: VehicleViewState): void {
     if (!this.loaded) return;
 
-    this.object.position.set(position.x, position.y, position.z);
-    this.object.rotation.set(0, 0, Math.atan2(-forward.x, forward.y));
+    applyChassisOrientation(this.object, position, forward, up);
 
     this.placeWheels(state);
 

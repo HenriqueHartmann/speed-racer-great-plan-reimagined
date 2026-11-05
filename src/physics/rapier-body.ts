@@ -266,6 +266,28 @@ export class RapierChassis implements ChassisBody {
     return (Math.asin(Math.max(-1, Math.min(1, r.z))) * 180) / Math.PI;
   }
 
+  /**
+   * Put the car back at `position`, still and upright.
+   *
+   * There is nothing to port here. The original ends the run instead -
+   * `doMach5:675` fades the sound out and does `go("CLIFF")` - so this serves
+   * the restart that game-over frame leads to, and it exists because driving
+   * off the real course otherwise leaves the game with no way back.
+   *
+   * Everything is cleared, not just the position: velocities, the orientation
+   * and the force accumulators. Rapier keeps accumulated force across a step
+   * unless it is told otherwise, which is a bug this project has already paid
+   * for once.
+   */
+  respawn(position: Vec3): void {
+    this.body.setTranslation({ x: position.x, y: position.y, z: position.z }, true);
+    this.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.body.resetForces(true);
+    this.body.resetTorques(true);
+  }
+
   applyImpulse(impulse: Vec3): void {
     this.body.applyImpulse({ x: impulse.x, y: impulse.y, z: impulse.z }, true);
   }

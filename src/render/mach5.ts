@@ -28,6 +28,7 @@
 import * as THREE from 'three';
 import * as K from '../sim/constants.js';
 import type { Vec3 } from '../sim/vehicle.js';
+import { applyChassisOrientation } from './scene.js';
 import type { VehicleView, VehicleViewState } from './scene.js';
 import { loftHull, type HullSection } from './hull.js';
 
@@ -574,9 +575,8 @@ export class Mach5 implements VehicleView {
 
   // -- per-frame ------------------------------------------------------------
 
-  update(position: Vec3, forward: Vec3, _up: Vec3, state: VehicleViewState): void {
-    this.object.position.set(position.x, position.y, position.z);
-    this.object.rotation.set(0, 0, Math.atan2(-forward.x, forward.y));
+  update(position: Vec3, forward: Vec3, up: Vec3, state: VehicleViewState): void {
+    applyChassisOrientation(this.object, position, forward, up);
 
     for (const wheel of this.wheels) wheel.rotation.x = state.wheelSpin;
     // The fallback car's wheels are authored in place, so it ignores the
