@@ -2,10 +2,9 @@
 
 Status tags follow `docs/research/project-brief.md`.
 
-> **Current position: Stage 0 — documentation and staging prepared; pending human review and
-> initial commit.** No dependency installed, no third-party tool run, no original artifact
-> executed, no gameplay code written. A custom read-only inspection script (Python standard
-> library, in memory) *was* run and produced the research. Each stage below requires **explicit
+> **Current position: Stage 1 complete — decompilation succeeded.** No dependency installed, no
+> original artifact executed, no gameplay code written. Decompiled output and working copies live
+> in the gitignored `original_game/` and are never committed. Each stage below requires **explicit
 > approval** before it begins.
 
 ---
@@ -14,11 +13,12 @@ Status tags follow `docs/research/project-brief.md`.
 
 | Tool | Formats | Recovers | Limitations | Executes the game? | Status |
 |---|---|---|---|---|---|
-| **ProjectorRays** ([repo](https://github.com/ProjectorRays/ProjectorRays)) | DCR, DXR, CCT, CXT | Lingo source from bytecode, cast structure | README documents **no version range**; support for Afterburner-compressed D10.1 is **unverified** | No | Primary, pending smoke test |
-| **ProjectorRaysWeb** ([repo](https://github.com/Quackster/ProjectorRaysWeb)) | same | same, in-browser | Client-side port may lag upstream. **Network behaviour must be reviewed** before it receives an original artifact | No | Smoke test candidate |
+| **ProjectorRays** ([repo](https://github.com/ProjectorRays/ProjectorRays)) | DCR, DXR, CCT, CXT | Lingo source from bytecode, cast structure | README documents no version range, but its JS port **was verified** against our Afterburner D10.1 movies | No | **Verified working** (via the JS port) |
+| **ProjectorRaysWeb** ([repo](https://github.com/Quackster/ProjectorRaysWeb)) | same | same, in JavaScript | **Audited: zero network primitives.** Loads `pako` from a CDN without SRI — avoided by running headless in Node with a `zlib` shim | No | **Used, headlessly** |
 | **LibreShockwave** ([repo](https://github.com/LibreShockwave/LibreShockwave)) | DIR/DXR/DCR/CCT/CST; RIFX/XFIR/RIFF/FFIR | See upstream claims below | **AGPL-3.0** — license review required before any code reuse | No | **Important Stage 1 candidate** |
 | **Earthquake Project format docs** ([Format-Documentation](https://github.com/Earthquake-Project/Format-Documentation), [otherfileformats](https://github.com/Earthquake-Project/otherfileformats)) | — | Director and related format documentation | Documentation resources, **not** a W3D geometry converter. Do not claim they establish a complete public W3D specification | No | Reference |
-| In-repo Python Afterburner reader *(already written, stdlib only)* | DCR | Chunk census, `XTRl`, `Lnam`, `CASt`, `DRCF`; locates `3DEM` and `FWS` payloads | No bytecode decompilation | No | **Working** — produced the current research |
+| In-repo Python Afterburner reader *(stdlib only)* | DCR | Chunk census, `XTRl`, `Lnam`, `CASt`, `DRCF`; locates `3DEM` and `FWS` payloads | No bytecode decompilation | No | **Working** — produced the format research |
+| **ProjectorRays JS core, run headless in Node** | DCR | **Full Lingo decompilation** — verified on all four movies | Recovered 3 of 12 scripts in `JIGSAW.dcr`; cause unknown | No | **Working — Stage 1 primary** |
 | **ScummVM Director engine** | DIR/DXR/DCR | Would *play* 2D Director titles | **2D only.** Shockwave 3D and the Havok Xtra are out of scope ([ScummVM](https://blogs.scummvm.org/djsrv/2020/08/17/shockwave/)) | Yes | **Not viable here** |
 
 ### LibreShockwave — upstream claims, read from its README
@@ -99,9 +99,58 @@ The nine files exist and are staged. **The initial commit has not been created.*
 
 ---
 
-## Stage 1 — Decompiler evaluation
+## Stage 1 — Decompiler evaluation — **COMPLETE**
 
-**Requires separate approval. Not authorized by Stage 0.**
+### What was actually done
+
+1. **Source audit of ProjectorRaysWeb before handing it anything.** Its README claims local-only
+   processing; the implementation was checked rather than trusted. The repository is a static site
+   — `index.html`, `style.css` and 11 JavaScript modules, no build and no backend. A grep for
+   network and code-execution primitives (`fetch`, `XMLHttpRequest`, `WebSocket`, `sendBeacon`,
+   `FormData`, `Worker`, `importScripts`, `eval`, `Function`) returned **zero matches**. The only
+   external resource is `pako` loaded from cdnjs — **without Subresource Integrity**, which is a
+   real if small supply-chain risk.
+2. **The browser was then avoided entirely.** The decompiler core has **no DOM coupling** — only
+   `main.js` touches the page — and `pako` is used solely for `inflate`. So the audited modules
+   were driven headlessly in Node 26 with `pako` shimmed onto Node's built-in `zlib`. No browser,
+   no CDN, no `npm install`, no network. Strictly safer than the planned browser smoke test.
+3. **Working copies** of the four movies were placed in the gitignored `original_game/source/`;
+   the originals were read once to copy and never written to.
+
+### Measured results
+
+| Movie | `read()` | Afterburner | Version | Casts | Scripts recovered | `Lscr` present |
+|---|---|---|---|---:|---:|---:|
+| `SR_level_1.dcr` | **true** | true | 1000 (Director 10) | 5 | **21** | 21 |
+| `SR_MAIN.dcr` | **true** | true | 1000 | 5 | **9** | 9 |
+| `MEDIA/JIGSAW.dcr` | **true** | true | 1000 | 1 | **3** | 12 |
+| `MEDIA/SLIDERS.dcr` | **true** | true | 1000 | 1 | **3** | 3 |
+
+**4328 lines of Lingo recovered.** Cast libraries in the two main movies are named
+`Internal`, `3D`, `Sounds`, `Graphics`, `Flash`.
+
+**One discrepancy, recorded not glossed:** `JIGSAW.dcr` has **12** `Lscr` resources but only **3**
+scripts were recovered. The other nine were not reconstructed. Cause **UNKNOWN** — possibly scripts
+not attached to a cast member, or a cast without a script context. This is a gap in recovery, not a
+gap in the file.
+
+### Conclusion
+
+ProjectorRays **does** handle Afterburner-compressed Director 10.1, contrary to the uncertainty
+recorded before testing. LibreShockwave was **not** needed and remains untested; it stays a
+cross-check and the only candidate claiming Shockwave3D support. Building it would require `cmake`,
+which is not installed on this machine.
+
+### What this unblocked
+
+The physics constants and the vehicle model, previously the project's largest unknown, are now
+**RECOVERED** with handler-level citations. See `docs/research/gameplay-spec.md` §3 and §3b.
+
+---
+
+## Stage 1 — original plan, retained for reference
+
+**Required separate approval. Not authorized by Stage 0.**
 
 Evaluate candidates in **parallel** rather than gating everything on one tool. A ProjectorRaysWeb
 failure must not terminate the whole investigation — that would discard a candidate whose

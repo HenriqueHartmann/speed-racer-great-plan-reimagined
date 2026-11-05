@@ -16,7 +16,7 @@ This is **evidence-driven, not preference**.
 |---|---|---|
 | The gameplay movie requires `Shockwave 3d Asset Xtra` | **VERIFIED** | The original targeted a 3D renderer |
 | Four `3DEM` / `IFX ` worlds exist, the largest ~2.5 MB | **VERIFIED** | Real 3D geometry is present in the artifact |
-| The gameplay movie declares `Havok.x32` | **VERIFIED** | Physics integration existed. What used it is **UNKNOWN** |
+| The gameplay movie declares `Havok.x32` | **VERIFIED** | Physics integration existed. Stage 1 recovered *how*: rigid-body chassis, zero contact friction, custom suspension and drive |
 | Renderer-negotiation symbols: `getRendererServices`, `directX7_0`, `fullScene`, `hardwareAntialiasing`, `sw3dbaddriverlist` | **VERIFIED** (symbols) | A hardware Direct3D 7 path was **available**. Whether it was actually used at runtime is **UNKNOWN** — no gameplay has been observed |
 | Symbols show heavy *scripted* behaviour | **INFERRED** | The original was likely not a pure simulation |
 
@@ -92,13 +92,15 @@ Scripted behaviour, track segment management, rival AI, gadgets, score, damage, 
 
 ### The open question this rests on
 
-> The original declaring `Havok.x32` (**VERIFIED**) does **not** prove its vehicle handling was
-> driven by generic rigid-body physics. That remains **UNKNOWN** until the relevant handlers are
-> recovered or behaviour is observed.
+> **Answered in Stage 1 — the hybrid split matches the original.** Decompilation shows the Mach 5
+> chassis *is* a Havok rigid body, but with **contact friction and restitution both set to zero**.
+> Grip, drive and suspension are applied by the behaviour itself: a four-point raycast hover
+> suspension plus custom drive impulses. The engine handled collision and integration; the game
+> handled feel.
 >
-> The hybrid architecture is chosen because it is *robust to either answer*: if decompilation shows
-> the original used full rigid-body car physics, the controller can move closer to Rapier; if it
-> shows a scripted model, the controller is already where it needs to be.
+> This is the architecture proposed here, confirmed rather than assumed. Recovered constants are in
+> `docs/research/gameplay-spec.md` §3b, and they become the starting point for the Stage 2 handling
+> contract.
 
 ---
 

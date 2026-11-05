@@ -66,22 +66,80 @@ Rigid-body symbols present: `gHavok`, `makeMovableRigidBody`, `makeFixedRigidBod
 (`doFaller`, `doHitTree`, segment swapping, a scripted rival) suggest the original was not a pure
 simulation — but that is **INFERRED** and must be settled by decompilation.
 
-### Physics parameters
+### Physics parameters — RECOVERED
 
-| Parameter | Value | Status |
+Recovered from decompiled Lingo in `SR_level_1.dcr`. Each value cites its originating script and
+handler. Source is held locally and is not part of this repository.
+
+| Parameter | Value | Source |
 |---|---|---|
-| Gravity | `TODO(unverified)` | **UNKNOWN** |
-| Fixed timestep (`pTimeStep`) | `TODO(unverified)` | **UNKNOWN** |
-| Sub-steps (`pSubSteps`) | `TODO(unverified)` | **UNKNOWN** |
-| Restitution | `TODO(unverified)` | **UNKNOWN** |
-| Friction | `TODO(unverified)` | **UNKNOWN** |
-| Collision tolerance (`pTolerance`) | `TODO(unverified)` | **UNKNOWN** |
-| World scale (`pScale`) | `TODO(unverified)` | **UNKNOWN** |
+| World gravity | `vector(0, 0, -90.81)` | `BehaviorScript 2 — Havok Physics`, `Initialize` |
+| Fixed timestep | `0.025` s (**40 Hz**) | same, property default `pTimeStep` |
+| Sub-steps | `5` | same, property default `pSubSteps` |
+| Collision tolerance | `4` | same, property default `pTolerance` |
+| World scale | `1.0` | same, property default `pScale` |
+| Deactivation parameters | `[5.0, 0.1]` | `BehaviorScript 19 — INIT` |
+| Chassis friction | `0` | `BehaviorScript 25 — doMach5`, `prepareCar` |
+| Chassis restitution | `0` | same |
 
-**The symbol names exist. The values do not.** They live inside `Lscr` bytecode that has not been
-decompiled. No number may be placed in this table that was not recovered or derived.
+Gravity is applied on **Z**, and its magnitude (90.81) is roughly 9.26× Earth gravity — consistent
+with a world scale where 1 unit is not 1 metre, or with deliberate arcade weighting. Which of the
+two is **UNKNOWN**.
+
+**Chassis friction and restitution are both zero.** The car does not rely on Havok's contact
+friction for grip at all; grip is applied by the custom controller described below.
 
 ---
+
+## 3b. Vehicle model — RECOVERED
+
+The Mach 5 is **not** a generic Havok vehicle. It is a **rigid-body chassis with a four-point
+raycast hover suspension**, driven by custom forces. This resolves the question previously left open.
+
+Recovered from `BehaviorScript 25 — doMach5`, handlers `prepareCar`, `updateHover`, `updateCar`.
+
+### Suspension
+
+`updateHover` casts a ray straight down from each of four wheel points against the track segment
+models. When the hit distance is below the rest height, it applies an impulse at that wheel point
+proportional to compression and damped by the point velocity along the contact direction, scaled by
+chassis mass. A per-wheel contact flag is recorded; their sum over four wheels forms `pPowerCoeff`,
+which gates how much drive authority the car has — so a car with wheels in the air loses power
+proportionally.
+
+### Tuning constants
+
+| Constant | Value | Note |
+|---|---|---|
+| `pMaxSpeed` | `69` | also published as the global `gM5MaxSpeed` |
+| `pAccGain` | `0.1`, then `0.07` | reassigned in `prepareCar` |
+| `pDecGain` | `0.02`, then `0.04` | reassigned in `prepareCar` |
+| `pBrakeGain` | `0.3` | |
+| `pCarMass` | `30000` | |
+| `pStrength` | `3.0` | suspension spring |
+| `pDamping` | `0.05` | suspension damper |
+| `pHoverDist` | `1.2` | suspension rest height |
+| `pWheelRadius` | `0.35` | |
+| `pFrontWheelBase` / `pBackWheelBase` | `1.2` / `1.2` | |
+| `pwidth` | `1.55` | track width |
+| `pMaxWheelTurn` | `45` | degrees |
+| `pWheelSpinCoeff` | `2` | visual wheel spin |
+| `pTurnBuildFactor` | `0.3` | steering builds over time rather than snapping |
+| `pGripFactor` | `10` | |
+| `pScalar` | `1.0` | |
+
+### Surface-dependent grip and drag — RECOVERED
+
+`pGrip` and `pDrag` are reassigned per surface state inside `updateCar`. Observed value pairs
+include grip `0.016` (lowest — a low-traction state), `0.8`, and `1`; drag `0.5`, `0.75` and `1.0`.
+**UNKNOWN:** the exact surface each pair corresponds to; the branch conditions have not yet been
+fully traced.
+
+### Declared but unused
+
+`pTurnGain`, `pXtraTurnGain`, `pMaxTurnSpeed`, `pMinTurnSpeed` and `pBoost` are declared as
+properties of `doMach5` but **never assigned** in it. They appear to be inherited from the
+behaviour shared with `doEnemy`. Do not implement them as if they were active.
 
 ## 4. Core loop state — INFERRED
 
@@ -150,7 +208,12 @@ The track appears to be **segment-streamed** rather than one monolithic level.
 | `doM5ChangeSegment`, `doEnemyChangeSegment` | segment transition for player and rivals |
 | `ovPlace_L`, `ovPlace_R`, `ovPlace_1`, `ovPlace_2`, `ovPlace_3` | position overlays |
 
-**UNKNOWN:** segment count, segment length, how segments are authored, and the track layout.
+**Segment length is `300` world units — RECOVERED.** `updateHover` derives the current segment as
+`integer(worldWheelPoint.y) / 300 + 1`, and within 2 units of a segment boundary it raycasts against
+*both* the current and the adjacent segment model, so wheels straddling a seam still find ground.
+The track therefore advances along **+Y**.
+
+**UNKNOWN:** segment count, how segments are authored, and the overall track layout.
 
 ---
 

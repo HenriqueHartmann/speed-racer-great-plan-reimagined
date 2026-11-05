@@ -3,9 +3,11 @@
 A personal research project: reverse-engineering the structure of the historical browser game
 *Speed Racer: The Great Plan*, and building a modern browser-based reimagining of it.
 
-**Status: research phase.** There is no game here yet — no gameplay code, no dependencies, no
-build. What exists is documentation of what the original artifact actually contains, written to a
-strict evidence standard.
+**Status: research phase, Stage 1 complete.** There is no game here yet — no gameplay code, no
+dependencies, no build. What exists is documentation of what the original artifact actually
+contains, written to a strict evidence standard. The original's Lingo source has been decompiled
+locally, so the physics constants and vehicle model are now recovered facts rather than open
+questions — the source itself stays local and is not part of this repository.
 
 ---
 
@@ -21,6 +23,9 @@ headers say otherwise:
 | **With physics integration** | It also declares `Havok.x32` |
 | **3D worlds are present** | Four `3DEM` / `IFX ` payloads; the largest ~2.5 MB |
 | **Flash lives inside Director** | Twelve uncompressed SWF (`FWS`) members across the four movies |
+| **The car is not a generic physics car** | Rigid-body chassis, friction and restitution both zero, with a four-point raycast hover suspension and custom drive forces |
+| **World gravity is `-90.81` on Z** | With a `0.025 s` fixed timestep (40 Hz) and 5 sub-steps |
+| **Track segments are 300 units long** | Advancing along +Y, with seam straddling handled per wheel |
 
 Full details: [`docs/research/`](docs/research/).
 
@@ -60,9 +65,10 @@ Two consequences worth stating plainly:
   inspection script (Python standard library, operating in memory) *was* run and produced most of
   this research; no third-party decompiler has been tested, and `SR_GAME.exe` was only
   string-scanned, never run.
-- **No physics parameter has a value.** The symbol names exist in the artifact; the numbers live in
-  Lingo bytecode that has not been decompiled. Empty placeholders are left empty rather than filled
-  with plausible guesses.
+- **Physics parameters now have values, and each cites its source handler.** They were recovered by
+  decompiling the Lingo bytecode locally. What is still unknown stays marked unknown — for example
+  which surface each grip and drag pair belongs to, and whether gravity `90.81` reflects a
+  non-metric world scale or deliberate arcade weighting.
 
 ---
 

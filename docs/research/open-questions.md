@@ -11,10 +11,10 @@ original, installs nothing unaudited, and bypasses no access control.
 
 | # | Question | Status | Next safe step |
 |---|---|---|---|
-| 1.1 | Does ProjectorRays handle **Afterburner-compressed Director 10.1** movies? | **UNKNOWN** | Its README documents no version range. Smoke-test ProjectorRaysWeb against one copy of `SR_level_1.dcr` — after reviewing that tool's actual network behaviour |
-| 1.2 | Does LibreShockwave parse our `SR_level_1.dcr`? | **UNKNOWN** | Upstream *claims* Afterburner support and Director 4–12. A claim is not verification on our file. Controlled source build and parsing test, if approved |
+| 1.1 | Does ProjectorRays handle **Afterburner-compressed Director 10.1** movies? | **RESOLVED — yes** | Its JavaScript port parsed all four movies: `read()` true, `afterburned` true, version 1000 (Director 10), 36 scripts recovered in total. See `implementation-plan.md` §Stage 1 results |
+| 1.2 | Does LibreShockwave parse our `SR_level_1.dcr`? | **UNKNOWN — and no longer urgent** | ProjectorRays already succeeded, so LibreShockwave is now a *cross-check* rather than a necessity. It remains the only candidate claiming Shockwave3D support, which matters for §2. Building it needs `cmake`, absent from this machine |
 | 1.3 | Can any tool export W3D **geometry** (not just metadata)? | **UNKNOWN** | No candidate currently satisfies all four project requirements — see §2 |
-| 1.4 | Is any hosted browser tool safe to hand an original artifact? | **UNKNOWN** | Review the actual implementation and network behaviour. A README claiming local-only processing is evidence, not proof |
+| 1.4 | Is any hosted browser tool safe to hand an original artifact? | **RESOLVED for ProjectorRaysWeb — and then avoided entirely** | Source audit found **zero** network primitives (no `fetch`, `XMLHttpRequest`, `WebSocket`, `sendBeacon`, `FormData`, `Worker`, `eval`). Only external resource is `pako` from a CDN, loaded **without** Subresource Integrity — a residual supply-chain risk. Sidestepped by running the audited modules headlessly in Node with `pako` shimmed onto the built-in `zlib`: no browser, no CDN, no network |
 
 ---
 
@@ -92,15 +92,15 @@ composition; legacy materials, shaders, textures and UV mapping; coordinate-syst
 
 | # | Question | Status | Next safe step |
 |---|---|---|---|
-| 3.1 | All physics constants — gravity, timestep, sub-steps, restitution, friction, tolerance, scale | **UNKNOWN** | Decompile `Lscr`. The symbol names exist; the values do not |
-| 3.2 | The vehicle handling model | **UNKNOWN** | Decompile `Lscr` |
-| 3.3 | Which gameplay objects actually use rigid-body simulation | **not yet verified** | Decompile `Lscr`. Declaring `Havok.x32` proves integration, not usage |
-| 3.4 | Whether the Mach 5 controller relies on generic rigid-body physics | **UNKNOWN** | Decompile `Lscr`, or observe gameplay |
-| 3.5 | Gadget effects, durations, costs, cooldowns | **UNKNOWN** | Decompile `Lscr` |
+| 3.1 | All physics constants — gravity, timestep, sub-steps, restitution, friction, tolerance, scale | **RECOVERED** | Values and their source handlers are in `gameplay-spec.md` §3. Remaining sub-question: whether gravity 90.81 reflects a non-metric world scale or deliberate arcade weighting — **UNKNOWN** |
+| 3.2 | The vehicle handling model | **RECOVERED** | Rigid-body chassis with four-point raycast hover suspension and custom drive forces. Tuning constants in `gameplay-spec.md` §3b |
+| 3.3 | Which gameplay objects actually use rigid-body simulation | **PARTIALLY RECOVERED** | The player and enemy chassis are Havok rigid bodies (`pChassisRB`), with friction and restitution both zero. Track, trees and pickups are configured in `BehaviorScript 20 — PREP`. A full per-object inventory has not yet been traced |
+| 3.4 | Whether the Mach 5 controller relies on generic rigid-body physics | **RESOLVED — no** | The chassis is a rigid body, but grip and drive are custom: contact friction and restitution are set to zero and the controller applies its own suspension and drive impulses. This vindicates the hybrid architecture in `architecture.md` §3 |
+| 3.5 | Gadget effects, durations, costs, cooldowns | **UNKNOWN — now tractable** | The handlers exist in the recovered source (`pBladesTIMER`, `pDeflectorTIMER`, `pGripTIMER`, `jacks_TIMER`, `pHas*` flags). Not yet traced |
 | 3.6 | Pickup values | **UNKNOWN** | Decompile `Lscr` |
 | 3.7 | Damage and oxygen rules | **UNKNOWN** | Decompile `Lscr` |
 | 3.8 | Rival ("Duggery") behaviour model | **UNKNOWN** | Decompile `Lscr` |
-| 3.9 | Segment count, length and layout | **UNKNOWN** | Decompile + W3D inspection |
+| 3.9 | Segment count, length and layout | **PARTIALLY RECOVERED** | Segment length is **300 world units**, track advances along **+Y**, and boundary straddling is handled within 2 units of a seam. Segment *count* and layout still require W3D inspection |
 | 3.10 | Key bindings | **UNKNOWN** | Decompile `Lscr` |
 | 3.11 | Stage size — `512 × 384` read big-endian from `DRCF` | **INFERRED** | Byte-order assumption unconfirmed. Decompile `DRCF`, or measure a capture |
 | 3.12 | Frame rate / tempo | **UNKNOWN** | Decompile `DRCF` |
