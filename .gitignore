@@ -1,0 +1,77 @@
+# =============================================================================
+# Artifact isolation — this is a safety control, not housekeeping.
+#
+# This repository is PUBLIC. Nothing derived from the original game may ever be
+# committed: not original movies, not decompiled Lingo, not converted meshes,
+# not extracted textures, audio or video. Git history is permanent and forks
+# persist after deletion, so an accidental commit cannot be fully undone.
+#
+# The original artifact directory lives inside this project root. It is never
+# moved, renamed or modified. These rules are what keep it out of Git.
+#
+# Verify with:  git check-ignore -v <path>
+# Stage with:   git add <explicit paths>     (never `git add .` or `git add -A`)
+# =============================================================================
+
+# -- Original artifact directory (root-anchored, exact name) ------------------
+/Speed Racer Demon on Wheels The Great Plan Full/
+
+# -- Research laboratory: extracted and derived material ----------------------
+/original_game/
+/reference/
+/extracted/
+/decompiled/
+/converted/
+
+# -- Original and derived binary formats, anywhere in the tree ----------------
+# Director / Shockwave movies and casts
+*.dcr
+*.dxr
+*.dir
+*.cct
+*.cxt
+*.cst
+# Shockwave 3D worlds and related 3D payloads
+*.w3d
+*.3dem
+# Flash
+*.swf
+*.flv
+*.fla
+# Executables and native modules
+*.exe
+*.dll
+*.x32
+*.so
+*.dylib
+# Archives that could carry any of the above
+*.zip
+*.rar
+*.7z
+*.iso
+
+# -- Node / build output (nothing installed yet; present for later stages) -----
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# -- Test and tooling output --------------------------------------------------
+playwright-report/
+test-results/
+.vitest/
+
+# -- Environment and secrets --------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# -- Editor and OS noise ------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
