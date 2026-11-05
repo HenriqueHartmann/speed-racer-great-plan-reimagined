@@ -232,8 +232,42 @@ export const TURN_BUILD_STEP = TURN_BUILD_FACTOR * 0.03;
 export const TURN_BUILD_CAP = 0.75;
 /** RECOVERED - released steering decays by this much per update... */
 export const TURN_BUILD_DECAY = 0.2;
-/** RECOVERED - ...down to this floor. */
-export const TURN_BUILD_FLOOR = 0.2;
+
+/**
+ * SUBSTITUTE - ...down to this floor. The original's is **0.2**.
+ *
+ * Raised because the recovered value makes the car feel like it is ignoring
+ * the wheel, which is the one complaint the original course produced that the
+ * flat test strip never could. The cause was measured, and it is neither of
+ * the obvious two:
+ *
+ *   - Not grip. Through a held turn the angle between where the car points and
+ *     where it travels is 1.3 degrees; the lateral anti-slide impulse works.
+ *   - Not inertia. `CHASSIS_INERTIA_MULTIPLIER` is a substitute whose own note
+ *     said to derive the tensor from the collider hull once that was decoded.
+ *     It is decoded, and the hull's yaw inertia is 4.10 against our 2.72 - the
+ *     real car is *harder* to turn than ours, not easier.
+ *
+ * It is the ramp. `pTurnBuild` creeps 0.009 a tick from its floor to 0.75, so
+ * full steering authority takes two seconds, while `pWheelTurn` puts the front
+ * wheels at full visual lock in five ticks. Both are recovered, and the gap
+ * between them is what the eye reads as the car refusing the wheel.
+ *
+ * Measured on the original course, lateral movement from a held turn at full
+ * speed, on a road 18 units wide:
+ *
+ *            floor 0.2 (recovered)   floor 0.4 (here)
+ *   0.5 s          1.2 units              2.2 units
+ *   1.0 s          7.3                   11.6
+ *   1.5 s         19.7                   29.0
+ *
+ * The floor rather than the rate, deliberately: the ramp still fills in while
+ * the key is held, which is the original's own feel. Only the first bite is
+ * stronger. Like `BRAKE_GAIN` and `THROTTLE_FORCE_SCALE`, this is a departure
+ * from a faithful value that was faithful and unpleasant; set it to 0.2 to
+ * drive what the original drove.
+ */
+export const TURN_BUILD_FLOOR = 0.4;
 /**
  * RECOVERED - reversing fills the ramp in one jump rather than creeping up.
  *

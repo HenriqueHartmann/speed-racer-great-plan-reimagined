@@ -110,6 +110,47 @@ describe('the original course', () => {
     expect(run()).toEqual(run());
   });
 
+  it('answers the wheel inside the first half second', () => {
+    // Reported from play: the wheel turns and the car does not. The cause was
+    // measured and it is not grip - the slip angle through a turn is 1.3
+    // degrees - nor inertia, which is already lighter than the real collider
+    // hull's. It is the ramp: pTurnBuild creeps from its floor to 0.75 over
+    // two seconds while the front wheels reach full visual lock in a sixth of
+    // one, and the eye reads that gap as the car refusing.
+    //
+    // TURN_BUILD_FLOOR is a declared SUBSTITUTE at 0.4 for that reason. At the
+    // recovered 0.2 the car moves 1.2 units sideways in the first half second,
+    // on a road 18 units wide. This fails at 0.2 and passes at 0.4.
+    const { world, colliders, chassis } = startTheRace();
+    for (let tick = 0; tick < 40; tick++) world.step(DRIVE);
+
+    const x0 = chassis.position.x;
+    for (let tick = 0; tick < 15; tick++) {
+      world.step({ ...DRIVE, right: true });
+      if (world.race.segment !== 0) colliders.setActive(world.race.segment);
+    }
+
+    expect(Math.abs(chassis.position.x - x0)).toBeGreaterThan(1.8);
+  });
+
+  it('still fills the turn in while the key is held', () => {
+    // The floor raises the first bite; it must not flatten the ramp, which is
+    // the original's own feel - the car leans harder the longer you hold it.
+    const { world, colliders } = startTheRace();
+    for (let tick = 0; tick < 40; tick++) world.step(DRIVE);
+
+    const build: number[] = [];
+    for (let tick = 0; tick < 60; tick++) {
+      world.step({ ...DRIVE, right: true });
+      if (world.race.segment !== 0) colliders.setActive(world.race.segment);
+      if (tick === 0 || tick === 30 || tick === 59) build.push(world.vehicle.turnBuild);
+    }
+
+    expect(build[0]).toBeLessThan(build[1]!);
+    expect(build[1]).toBeLessThan(build[2]!);
+    expect(build[2]).toBeCloseTo(K.TURN_BUILD_CAP, 2);
+  });
+
   it('ends the run when the car drives off the course', () => {
     // The fall rule has been in the simulation since the slice course and was
     // unreachable there, because that course was flat at z = 0. On real
