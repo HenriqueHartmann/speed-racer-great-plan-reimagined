@@ -340,6 +340,22 @@ export interface Surface {
 
 export const SURFACE_DEFAULT: Surface = { grip: 1, drag: 1.0, inferredName: 'default' };
 
+/**
+ * RECOVERED - `doMach5:481` sets `pTrackFace = 99` for a wheel whose ray finds
+ * nothing at all.
+ *
+ * It is what stops a surface outliving the ground that reported it: without it
+ * a car in the air keeps the grip and drag of the last thing it drove on until
+ * it lands. `surfaceFor(99)` is the default, which is the point.
+ *
+ * Note what it is *not* for. The original's fall rule reads it as a third
+ * clause alongside `pPowerCoeff = 0`, but that clause is redundant: the
+ * suspension ray is cast with `maxDistance: 1` while `pHoverDist` is 1.2, so a
+ * wheel is grounded exactly when its ray hits, and no wheel grounded already
+ * means the ray missed.
+ */
+export const NO_GROUND_EFFECT_ID = 99;
+
 export const SURFACES_BY_EFFECT_ID: ReadonlyMap<number, Surface> = new Map([
   [8, { grip: 0.016, drag: 1, inferredName: 'shallow water' }],
   [9, { grip: 0.016, drag: 1, inferredName: 'shallow water' }],

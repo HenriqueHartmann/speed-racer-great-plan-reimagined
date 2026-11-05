@@ -101,6 +101,25 @@ export const NO_INPUT: VehicleInput = {
  * original's own geometry, not an assumption of ours, and the wheelbase and
  * track width are recovered constants.
  */
+/**
+ * The wheel whose surface the whole car drives on - the **rear left**.
+ *
+ * `doMach5` writes `pTrackFace` in one place only, `if i = 4` at line 452, and
+ * index 4 is `posD`:
+ *
+ *   pLocalRight = pLocalDown.cross(pLocalForward)            -> (1, 0, 0)
+ *   posD = com - pBackWheelBase * forward + pwidth * 0.5 * -pLocalRight
+ *
+ * so the original's fourth wheel point is behind and to the left. Our list is
+ * ordered [FL, FR, RL, RR], which puts it at index 2.
+ *
+ * This read index 3 - the rear *right* - until the original track was decoded.
+ * A strip that reports one surface everywhere cannot tell the two apart, which
+ * is exactly why it survived: the first course with grass down one side is the
+ * first course that would have shown it.
+ */
+const SURFACE_WHEEL = 2;
+
 export const WHEEL_LOCAL_POINTS: readonly Vec3[] = [
   vec3(-K.TRACK_WIDTH / 2, K.WHEELBASE_FRONT, 0), // front left
   vec3(K.TRACK_WIDTH / 2, K.WHEELBASE_FRONT, 0), // front right
@@ -215,12 +234,16 @@ function updateHover(
     if (!hit || hit.distance >= K.HOVER_DISTANCE) {
       state.grounded[i] = false;
       state.hoverDistances[i] = K.HOVER_DISTANCE;
+      if (i === SURFACE_WHEEL) {
+        // `doMach5:481` writes the sentinel for a wheel that finds nothing, so
+        // the surface cannot outlive the ground that reported it.
+        state.effectId = K.NO_GROUND_EFFECT_ID;
+        state.surface = K.SURFACE_DEFAULT;
+      }
       continue;
     }
 
-    // The original tracked the surface under the rear-right wheel (its index 4)
-    // and used that face index as the effectID for the whole car.
-    if (i === 3) {
+    if (i === SURFACE_WHEEL) {
       state.effectId = hit.effectId;
       state.surface = K.surfaceFor(hit.effectId);
     }
