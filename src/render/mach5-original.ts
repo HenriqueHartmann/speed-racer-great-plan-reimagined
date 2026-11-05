@@ -33,6 +33,7 @@ import {
   wheelDrop,
   type Vec3Like,
 } from './model-frame.js';
+import { clearYUpConversion } from './scene-root.js';
 import type { VehicleView, VehicleViewState } from './scene.js';
 
 export const MACH5_MODEL_URL = 'models/mach5.glb';
@@ -85,11 +86,7 @@ export class OriginalMach5 implements VehicleView {
     // nothing, which is how this was got wrong once already. Search by name and
     // report if it is not found, instead of silently leaving the car on its
     // tail.
-    const converted = scene.getObjectByName('SceneRoot') ?? scene;
-    converted.quaternion.identity();
-    converted.rotation.set(0, 0, 0);
-    converted.updateMatrix();
-    this.uprighted = converted.name === 'SceneRoot';
+    this.uprighted = clearYUpConversion(scene);
 
     this.root.add(scene);
     this.object.add(this.root);

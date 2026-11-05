@@ -222,3 +222,19 @@ export const GADGET_NODES = {
   shield: ['windshield_top'],
   robot: ['ROBOT'],
 } as const;
+
+/**
+ * Whether a node of the decoded track world is drawn.
+ *
+ * Only the 37 road segments, `SEG_1` through `SEG_37`. Resource 7587 also
+ * carries the things `PREP` hides - the `INV_` colliders, the `FAL_*_TGR`
+ * faller triggers, anything named `Finish*` - and `carPos_Mach5` and
+ * `path_01..path_209`, which are coordinates rather than art: the start line
+ * and the rival racing line. Drawn literally they would all appear.
+ *
+ * The props arrive in their own step, where each can be checked against
+ * `PREP`'s own visibility pass one at a time.
+ */
+export function isDrawnTrackNode(name: string): boolean {
+  return /^SEG_\d+$/.test(name);
+}
