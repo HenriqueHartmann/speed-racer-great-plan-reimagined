@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { World } from '../src/sim/world.js';
 import { AnalyticBody, FlatGround } from '../src/sim/analytic-body.js';
+import { flatGroundMesh } from '../src/sim/ground-mesh.js';
 import { Track } from '../src/sim/track.js';
 import { resolveImpact } from '../src/sim/collision.js';
 import { vec3, NO_INPUT, type VehicleInput } from '../src/sim/vehicle.js';
@@ -153,9 +154,9 @@ describe('Jacks', () => {
 
 describe('Grip', () => {
   it('overrides a low-grip surface while active', () => {
-    const track = new Track({ segments: 2 });
+    const track = new Track({ ground: flatGroundMesh(2) });
     // Segment 1 reports a road id; force a slippery one to prove the override.
-    const slippery = new Track({ segments: 2 });
+    const slippery = new Track({ ground: flatGroundMesh(2) });
     void slippery;
     const { world } = freshWorld(track);
 

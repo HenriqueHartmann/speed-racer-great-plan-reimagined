@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { World } from '../src/sim/world.js';
 import { AnalyticBody } from '../src/sim/analytic-body.js';
 import { Track, buildSliceTrack, segmentIndexFor } from '../src/sim/track.js';
+import { flatGroundMesh } from '../src/sim/ground-mesh.js';
 import { resolveImpact, overlaps } from '../src/sim/collision.js';
 import { vec3, type VehicleInput } from '../src/sim/vehicle.js';
 import * as K from '../src/sim/constants.js';
@@ -50,7 +51,38 @@ describe('segment indexing', () => {
   });
 
   it('never exceeds the 37 slots the original pre-sized', () => {
-    const track = new Track({ segments: 100 });
+    const track = new Track({ ground: flatGroundMesh(100) });
+    expect(track.segments.length).toBe(K.SEGMENT_SLOTS);
+  });
+});
+
+describe('the ground query', () => {
+  it('finds ground exactly on a seam', () => {
+    // y = 300 belongs to segment 2 by segmentIndexFor, but the geometry under
+    // it may be filed in either. The original consulted both within 2 units.
+    const track = new Track({ ground: flatGroundMesh(3) });
+    expect(track.castDown(vec3(0, 300, 0.5), 1)).not.toBeNull();
+  });
+
+  it('misses beyond the last segment and behind the start line', () => {
+    const track = new Track({ ground: flatGroundMesh(3) });
+    expect(track.castDown(vec3(0, 5000, 0.5), 1)).toBeNull();
+    expect(track.castDown(vec3(0, -50, 0.5), 1)).toBeNull();
+  });
+
+  it('misses off the side of the strip', () => {
+    // The mesh's own extent is what bounds the car now; there is no halfWidth.
+    const track = new Track({ ground: flatGroundMesh(1) });
+    expect(track.castDown(vec3(500, 150, 0.5), 1)).toBeNull();
+  });
+
+  it('carries the surface id the mesh gives it', () => {
+    const track = new Track({ ground: flatGroundMesh(1, 18, 4) });
+    expect(track.castDown(vec3(0, 150, 0.5), 1)?.effectId).toBe(4);
+  });
+
+  it('still caps at the 37 slots the original pre-sized', () => {
+    const track = new Track({ ground: flatGroundMesh(100) });
     expect(track.segments.length).toBe(K.SEGMENT_SLOTS);
   });
 });
@@ -72,7 +104,7 @@ describe('props in adjacent segments are intangible', () => {
   });
 
   it('a wall one segment ahead does not damage the car', () => {
-    const track = new Track({ segments: 3 });
+    const track = new Track({ ground: flatGroundMesh(3) });
     // Put a wall exactly where the car sits, but file it under segment 2.
     track.addProp(2, 'wall', vec3(0, 0, 1), vec3(5, 5, 5));
     const { world } = worldOn(track);
@@ -128,7 +160,7 @@ describe('collision damage formulas', () => {
 
 describe('collision debounce', () => {
   it('one impact does not re-trigger every tick while overlapping', () => {
-    const track = new Track({ segments: 2 });
+    const track = new Track({ ground: flatGroundMesh(2) });
     // Ahead of the car, so it arrives at speed rather than starting inside.
     track.addProp(1, 'wall', vec3(0, 40, 1), vec3(8, 8, 8));
     const { world } = worldOn(track);
@@ -143,7 +175,7 @@ describe('collision debounce', () => {
 
 describe('pickups', () => {
   it('a wrench repairs and scores, and is consumed', () => {
-    const track = new Track({ segments: 2 });
+    const track = new Track({ ground: flatGroundMesh(2) });
     const wrench = track.addProp(1, 'pickup', vec3(0, 0, 1), vec3(6, 6, 6), 'wrench');
     const { world } = worldOn(track);
     world.addDamage(80);
@@ -159,7 +191,7 @@ describe('pickups', () => {
   });
 
   it('oxygen refills, clamped at the maximum', () => {
-    const track = new Track({ segments: 2 });
+    const track = new Track({ ground: flatGroundMesh(2) });
     track.addProp(1, 'pickup', vec3(0, 0, 1), vec3(6, 6, 6), 'oxygen');
     const { world } = worldOn(track);
     world.race.oxygen = 20;
@@ -174,7 +206,7 @@ describe('reverse suppression, end to end', () => {
     // over reverse in the controller, so holding both still drives - which is
     // exactly the state the recovered rule keys on.
     const makeRun = (holdReverse: boolean) => {
-      const track = new Track({ segments: 2 });
+      const track = new Track({ ground: flatGroundMesh(2) });
       track.addProp(1, 'wall', vec3(0, 40, 1), vec3(8, 8, 8));
       const { world } = worldOn(track);
       const input: VehicleInput = { ...DRIVE, backward: holdReverse };

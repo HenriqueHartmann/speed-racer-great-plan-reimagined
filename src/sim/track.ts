@@ -15,6 +15,7 @@
  */
 
 import * as K from './constants.js';
+import { castDownMesh, flatGroundMesh, type GroundMesh } from './ground-mesh.js';
 import { vec3, type GroundHit, type GroundProbe, type Vec3 } from './vehicle.js';
 
 /** What a prop does when the car touches it, mirroring `userData.kind`. */
@@ -34,22 +35,22 @@ export interface Prop {
   active: boolean;
 }
 
-/** One 300-unit slice of track. */
+/**
+ * One 300-unit slice of track.
+ *
+ * The surface and the ground height used to live here, as a flat plane and a
+ * half-width, because the real geometry was undecoded. They now come from the
+ * mesh, which curves, climbs and changes material across a segment - none of
+ * which a single height and width could say.
+ */
 export interface Segment {
   readonly index: number;
-  /** Surface id reported by a raycast landing in this segment. */
-  readonly effectId: number;
-  /** Ground height; a flat segment for now, since real geometry is undecoded. */
-  readonly height: number;
-  /** Half-width of the drivable strip. Beyond it, the ray finds nothing. */
-  readonly halfWidth: number;
   readonly props: Prop[];
 }
 
 export interface TrackOptions {
-  /** How many of the 37 slots to populate. */
-  segments: number;
-  halfWidth?: number;
+  /** The triangles under the whole course, grouped by segment. */
+  ground: GroundMesh;
 }
 
 /**
@@ -69,21 +70,14 @@ export class Track implements GroundProbe {
 
   private nextPropId = 1;
 
-  constructor(opts: TrackOptions) {
-    const count = Math.min(opts.segments, K.SEGMENT_SLOTS);
-    const halfWidth = opts.halfWidth ?? 18;
+  private readonly ground: GroundMesh;
 
-    for (let i = 1; i <= count; i++) {
-      this.segments.push({
-        index: i,
-        // A varied-but-deterministic surface layout, so grip changes are
-        // exercised. Real surface ids live in the undecoded track geometry.
-        effectId: i % 7 === 0 ? 4 : i % 11 === 0 ? 3 : 1,
-        height: 0,
-        halfWidth,
-        props: [],
-      });
-    }
+  constructor(opts: TrackOptions) {
+    this.ground = opts.ground;
+    // The original pre-sized its arrays to 37 slots and never grew them, so a
+    // mesh carrying more segments than that is truncated rather than honoured.
+    const count = Math.min(opts.ground.segmentCount, K.SEGMENT_SLOTS);
+    for (let i = 1; i <= count; i++) this.segments.push({ index: i, props: [] });
   }
 
   segment(index: number): Segment | undefined {
@@ -138,21 +132,19 @@ export class Track implements GroundProbe {
     if (withinSeam < 2) candidates.push(index - 1);
     else if (withinSeam > K.SEGMENT_LENGTH - 2) candidates.push(index + 1);
 
+    let best: GroundHit | null = null;
     for (const i of candidates) {
-      const seg = this.segment(i);
-      if (!seg) continue;
-      if (Math.abs(from.x) > seg.halfWidth) continue;
-
-      const distance = from.z - seg.height;
-      if (distance < 0 || distance > maxDistance) continue;
-
-      return {
-        distance,
-        point: vec3(from.x, from.y, seg.height),
-        effectId: seg.effectId,
-      };
+      if (!this.segment(i)) continue;
+      const hit = castDownMesh(
+        this.ground,
+        from,
+        maxDistance,
+        this.ground.segmentStart[i - 1]!,
+        this.ground.segmentEnd[i - 1]!,
+      );
+      if (hit && (best === null || hit.distance < best.distance)) best = hit;
     }
-    return null;
+    return best;
   }
 }
 
@@ -164,7 +156,7 @@ export class Track implements GroundProbe {
  * so nothing here claims to reproduce it - only to exercise the recovered rules.
  */
 export function buildSliceTrack(segments = 6): Track {
-  const track = new Track({ segments });
+  const track = new Track({ ground: flatGroundMesh(segments) });
   const half = vec3(2, 2, 3);
 
   for (let s = 2; s <= segments; s++) {
