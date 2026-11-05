@@ -13,14 +13,19 @@ original, installs nothing unaudited, and bypasses no access control.
 |---|---|---|---|
 | 1.1 | Does ProjectorRays handle **Afterburner-compressed Director 10.1** movies? | **RESOLVED — yes** | Its JavaScript port parsed all four movies: `read()` true, `afterburned` true, version 1000 (Director 10), 36 scripts recovered in total. See `implementation-plan.md` §Stage 1 results |
 | 1.2 | Does LibreShockwave parse our `SR_level_1.dcr`? | **UNKNOWN — and no longer urgent** | ProjectorRays already succeeded, so LibreShockwave is now a *cross-check* rather than a necessity. It remains the only candidate claiming Shockwave3D support, which matters for §2. Building it needs `cmake`, absent from this machine |
-| 1.3 | Can any tool export W3D **geometry** (not just metadata)? | **UNKNOWN** | No candidate currently satisfies all four project requirements — see §2 |
+| 1.3 | Can any tool export W3D **geometry** (not just metadata)? | **IN PROGRESS — our own reader** | The container, scene graph and textures are decoded by `tools/w3d/ifx.py`; the mesh block `0x49` is not. See `w3d-format.md`. No third-party tool is involved |
 | 1.4 | Is any hosted browser tool safe to hand an original artifact? | **RESOLVED for ProjectorRaysWeb — and then avoided entirely** | Source audit found **zero** network primitives (no `fetch`, `XMLHttpRequest`, `WebSocket`, `sendBeacon`, `FormData`, `Worker`, `eval`). Only external resource is `pako` from a CDN, loaded **without** Subresource Integrity — a residual supply-chain risk. Sidestepped by running the audited modules headlessly in Node with `pako` shimmed onto the built-in `zlib`: no browser, no CDN, no network |
 
 ---
 
 ## 2. W3D / 3D geometry
 
-### The four requirements no tool currently satisfies
+> **Superseded in part.** Rather than find a tool meeting the four requirements below, this project
+> now has **its own reader** (`tools/w3d/ifx.py`), which satisfies all four by construction: our
+> source, local, nothing executed, no protection mechanism touched. The container, scene graph and
+> textures work; geometry does not yet. The survey below is retained for the record.
+
+### The four requirements no third-party tool satisfied
 
 1. Publicly auditable source code.
 2. Suitable support for the Director 10.1 W3D variant.
@@ -112,7 +117,7 @@ composition; legacy materials, shaders, textures and UV mapping; coordinate-syst
 | # | Question | Status | Next safe step |
 |---|---|---|---|
 | 4.1 | FLV pixel dimensions and true frame rate | **UNKNOWN** | `onMetaData` stores `width = 0`, `height = 0` and implausible `framerate`. Decode one frame |
-| 4.2 | Polygon counts, materials, textures, hierarchy in the `3DEM` worlds | **UNKNOWN** | Blocked on §2 |
+| 4.2 | Polygon counts, materials, textures, hierarchy in the `3DEM` worlds | **PARTIALLY RECOVERED** | Hierarchy and transforms read; **50 textures extracted as JPEG**; materials and shaders located but not decoded; polygon data still inside the undecoded `0x49` mesh block |
 | 4.3 | Audio sample rate, bit depth, channels, duration | **UNKNOWN** | Extract and inspect, after Stage 1 approval |
 | 4.4 | What the SWF members actually contain | **UNKNOWN** | Dump `FWS` payloads and inspect with ordinary SWF tooling |
 

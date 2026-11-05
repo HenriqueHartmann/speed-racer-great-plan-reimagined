@@ -23,6 +23,8 @@ headers say otherwise:
 | **With physics integration** | It also declares `Havok.x32` |
 | **3D worlds are present** | Four `3DEM` / `IFX ` payloads; the largest ~2.5 MB |
 | **Flash lives inside Director** | Twelve uncompressed SWF (`FWS`) members across the four movies |
+| **The Mach 5 is 20 separate models** | `mach5_body`, four wheels, four grips, `jacks`, `saw`, `lights`, `scope_*`, `ROBOT` — matching the Lingo properties one for one |
+| **Textures are JPEG** | Even when the name says `.png`; 50 extracted and verified |
 | **The car is not a generic physics car** | Rigid-body chassis, friction and restitution both zero, with a four-point raycast hover suspension and custom drive forces |
 | **World gravity is `-90.81` on Z** | With a `0.025 s` fixed timestep (40 Hz) and 5 sub-steps |
 | **Track segments are 300 units long** | Advancing along +Y, with seam straddling handled per wheel |
@@ -39,6 +41,7 @@ Full details: [`docs/research/`](docs/research/).
 | [`docs/research/artifact-inventory.md`](docs/research/artifact-inventory.md) | The 21 original files, SHA-256 baseline, resource census, provenance limits |
 | [`docs/research/gameplay-spec.md`](docs/research/gameplay-spec.md) | Gameplay model recovered from symbols and source |
 | [`docs/research/handling-contract.md`](docs/research/handling-contract.md) | **The vehicle behaviour to reproduce**, every number traced to its handler |
+| [`docs/research/w3d-format.md`](docs/research/w3d-format.md) | The Shockwave 3D container format, reverse-engineered here |
 | [`docs/research/asset-catalog.md`](docs/research/asset-catalog.md) | Assets located — and what has **not** been extracted |
 | [`docs/research/open-questions.md`](docs/research/open-questions.md) | Everything unresolved, with the next safe step for each |
 | [`docs/architecture.md`](docs/architecture.md) | Proposed technical architecture |
@@ -84,6 +87,8 @@ the owner's own machines:
 | `Speed Racer Demon on Wheels The Great Plan Full/` | The original artifact as supplied: four Director movies, the Windows projector, and 16 FLV videos |
 | `original_game/source/` | Working copies of the four `.dcr` movies |
 | `original_game/decompiled/` | The Lingo source recovered from those movies |
+| `original_game/extracted/` | 3D worlds and Flash members pulled out of the movies, plus 50 extracted textures |
+| `tools/` | Our own extraction and inspection tools — standard library only |
 
 The original files are never moved, renamed or modified in place. Their SHA-256 values are recorded
 in [`artifact-inventory.md`](docs/research/artifact-inventory.md) and re-verified before every
