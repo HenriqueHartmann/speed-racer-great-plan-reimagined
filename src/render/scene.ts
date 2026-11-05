@@ -13,7 +13,6 @@
  */
 
 import * as THREE from 'three';
-import * as K from '../sim/constants.js';
 import type { Vec3 } from '../sim/vehicle.js';
 
 /** Anything that can stand in for the car. */
@@ -51,6 +50,8 @@ export interface VehicleViewState {
 export class ChaseCamera {
   readonly camera: THREE.PerspectiveCamera;
   private readonly target = new THREE.Vector3();
+  /** There is nothing to trail from on the first frame. */
+  private placed = false;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 5000);
@@ -69,8 +70,18 @@ export class ChaseCamera {
       position.y - forward.y * behind,
       position.z + height,
     );
-    this.camera.position.lerp(desired, alpha);
-    this.target.lerp(new THREE.Vector3(position.x, position.y, position.z + 1), alpha);
+    const look = new THREE.Vector3(position.x, position.y, position.z + 1);
+    if (this.placed) {
+      this.camera.position.lerp(desired, alpha);
+      this.target.lerp(look, alpha);
+    } else {
+      // Snap. Easing out of the default position would start the camera at
+      // the world origin, which was invisible while the car spawned there and
+      // is a second of empty sky now that the course starts at x 42, y 39.
+      this.camera.position.copy(desired);
+      this.target.copy(look);
+      this.placed = true;
+    }
     this.camera.lookAt(this.target);
   }
 
@@ -126,7 +137,11 @@ export function createPropViews(
   return views;
 }
 
-export function createScene(segmentCount = 8, halfWidth = 18): THREE.Scene {
+/**
+ * The lights and the sky. The road is no longer generated here: the original
+ * course is loaded as a model by `TrackView` and added by the caller.
+ */
+export function createScene(): THREE.Scene {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87b8e8);
   scene.fog = new THREE.Fog(0x87b8e8, 120, 900);
@@ -144,29 +159,6 @@ export function createScene(segmentCount = 8, halfWidth = 18): THREE.Scene {
   sun.shadow.camera.bottom = -d;
   scene.add(sun);
   scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x3a3a2a, 0.9));
-
-  // The drivable strip. It is as wide as the track's own half-width, so what
-  // you can see is exactly what the suspension will find.
-  const length = K.SEGMENT_LENGTH * segmentCount;
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(halfWidth * 2, length),
-    new THREE.MeshStandardMaterial({ color: 0x6f6f72, roughness: 1 }),
-  );
-  ground.position.y = length / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // A stripe at every segment boundary, so the recovered 300-unit spacing is
-  // visible rather than merely documented.
-  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e8 });
-  for (let i = 0; i <= segmentCount; i++) {
-    const stripe = new THREE.Mesh(
-      new THREE.PlaneGeometry(halfWidth * 2, 2),
-      stripeMat,
-    );
-    stripe.position.set(0, i * K.SEGMENT_LENGTH, 0.02);
-    scene.add(stripe);
-  }
 
   return scene;
 }

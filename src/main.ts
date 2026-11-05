@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import * as K from './sim/constants.js';
 import { World } from './sim/world.js';
 import { vec3, type VehicleInput } from './sim/vehicle.js';
-import { buildSliceTrack } from './sim/track.js';
+import { Track } from './sim/track.js';
 import { GADGETS, GADGET_BY_KEY, type GadgetId } from './sim/gadgets.js';
 import {
   initRapier,
@@ -26,10 +26,12 @@ import {
   type VehicleView,
 } from './render/scene.js';
 import { Mach5 } from './render/mach5.js';
+import { TrackView } from './render/track-view.js';
+import { SegmentColliders } from './physics/segment-colliders.js';
+import { parseGroundMesh } from './sim/ground-mesh.js';
 import { OriginalMach5 } from './render/mach5-original.js';
 
-const SEGMENTS = 6;
-const TRACK_HALF_WIDTH = 18;
+const TRACK_GROUND_URL = 'models/track-ground.bin';
 
 /** Driving keys are held; gadget keys are edge-triggered. */
 type DriveKey = 'forward' | 'backward' | 'left' | 'right';
@@ -114,13 +116,19 @@ async function main(): Promise<void> {
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const hud = document.getElementById('hud') as HTMLElement;
 
-  const track = buildSliceTrack(SEGMENTS);
+  // The original course, as the game shipped it: 37 segments decoded from
+  // SR_level_1 resource 7587. tools/extract_mesh.sh regenerates this file.
+  const ground = parseGroundMesh(new Uint8Array(await (await fetch(TRACK_GROUND_URL)).arrayBuffer()));
+  const track = new Track({ ground });
 
   const rapier = await initRapier();
   const host = new RapierWorld(rapier);
-  // A strip, not a plane: driving off the edge should mean falling.
-  const length = K.SEGMENT_LENGTH * SEGMENTS;
-  host.addGroundStrip(TRACK_HALF_WIDTH, length / 2, length / 2);
+
+  // One solid segment at a time, as doM5ChangeSegment kept it. The hover ray
+  // consults two at a seam; the collider never does.
+  const segmentColliders = new SegmentColliders(host, ground);
+  let solidSegment = 1;
+  segmentColliders.setActive(solidSegment);
 
   // Solid props get a static collider so they stop the car. Pickups do not:
   // they are collected by the simulation's overlap test and must not block.
@@ -132,7 +140,17 @@ async function main(): Promise<void> {
     }
   }
 
-  const chassis = new RapierChassis(rapier, host, vec3(0, 4, K.SPAWN_HEIGHT));
+  // The start line is the original's own: carPos_Mach5, carried in the ground
+  // data. prepareCar:146 drops the car onto the road from there; SPAWN_HEIGHT
+  // stays the declared substitute, since the recovered +1 is measured from the
+  // model origin and ours is the centre of mass.
+  const road = track.castDown(vec3(ground.spawn.x, ground.spawn.y, ground.spawn.z), 60);
+  const start = vec3(
+    ground.spawn.x,
+    ground.spawn.y,
+    (road ? ground.spawn.z - road.distance : ground.spawn.z) + K.SPAWN_HEIGHT,
+  );
+  const chassis = new RapierChassis(rapier, host, start);
   const world = new World({
     seed: 0x5eed_1234,
     body: chassis,
@@ -142,7 +160,7 @@ async function main(): Promise<void> {
     stepPhysics: () => host.step(),
   });
 
-  const scene = createScene(SEGMENTS, TRACK_HALF_WIDTH);
+  const scene = createScene();
 
   // Prefer the model recovered from the game's own 3D world. The hand-built
   // one stays as a fallback rather than being deleted, so a missing or broken
@@ -172,6 +190,19 @@ async function main(): Promise<void> {
     car = new Mach5();
   }
   scene.add(car.object);
+
+  // The road itself. A missing or broken track model degrades to an empty
+  // world you can still drive in, rather than a blank screen.
+  try {
+    const view = await TrackView.load();
+    const { drawn, hidden, uprighted } = view.report();
+    if (drawn !== ground.segmentCount || !uprighted) {
+      console.warn(`track model drew ${drawn} of ${ground.segmentCount} segments, hid ${hidden}, uprighted ${uprighted}`);
+    }
+    scene.add(view.object);
+  } catch (err) {
+    console.warn('the track model did not load:', err);
+  }
   const propViews = createPropViews(scene, track.segments);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -216,6 +247,13 @@ async function main(): Promise<void> {
       stepped++;
     }
     if (stepped === MAX_CATCHUP_TICKS) accumulator = 0;
+
+    // `doM5ChangeSegment` toggled the solid segment as the car crossed; the
+    // simulation already tracks which one it is in.
+    if (world.race.segment !== solidSegment) {
+      solidSegment = world.race.segment;
+      segmentColliders.setActive(solidSegment);
+    }
 
     const v = world.vehicle;
     const r = world.race;
@@ -272,7 +310,7 @@ async function main(): Promise<void> {
     hud.textContent =
       `speed ${v.forwardVel.toFixed(1)} / ${K.MAX_SPEED}` +
       `   wheels ${v.grounded.filter(Boolean).length}/4` +
-      `   segment ${r.segment}/${SEGMENTS}` +
+      `   segment ${r.segment}/${ground.segmentCount}` +
       `   surface ${surface} (grip ${v.surface.grip})` +
       `\ndamage ${r.damage.toFixed(0)}   oxygen ${r.oxygen.toFixed(0)}` +
       `   score ${r.score}   tick ${world.tick}${outcome}` +
