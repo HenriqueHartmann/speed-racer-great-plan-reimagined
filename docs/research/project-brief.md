@@ -128,7 +128,11 @@ This repository is **public**, personal, and not affiliated with any employer.
 ## Non-goals
 
 - Bit-for-bit reproduction of the original binary or its assets.
-- Redistribution of original game content in any form.
+- Repackaging or distributing the game as a playable product, or presenting this work as an
+  official release. (The repository itself is public and does track the original artifact and
+  material derived from it — that is a deliberate decision, recorded under **Asset and publication
+  policy** above. This bullet previously read "redistribution of original game content in any
+  form", which flatly contradicted it.)
 - Running the original game, its installer, or its projector as part of the normal workflow.
 - Bypassing copy protection, access controls, or any similar mechanism.
 - Executing binary-only tools whose source cannot be audited.

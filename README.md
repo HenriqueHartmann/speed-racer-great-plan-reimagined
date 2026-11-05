@@ -42,9 +42,12 @@ npm test        # determinism and replay suite
 npm run build   # production bundle
 ```
 
-W/A/S/D or the arrow keys drive; Space fires the Jacks. **The car is a placeholder** at the
-recovered dimensions — the original mesh encoding is not decoded, so its shape is wrong while its
-proportions are right.
+W/A/S/D or the arrow keys drive; Space fires the Jacks; the digits `1`–`7` fire the seven gadgets.
+
+**The car is the original Mach 5**, decoded from the game's own Shockwave 3D world — 20 models,
+4,454 triangles, with its own textures. `tools/extract_mesh.sh` regenerates it from the artifact;
+`docs/research/w3d-format.md` documents the format and the decoder. The hand-built car it replaced
+is kept as the fallback for a missing model file.
 
 ---
 

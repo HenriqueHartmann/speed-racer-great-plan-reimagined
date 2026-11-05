@@ -13,7 +13,7 @@ original, installs nothing unaudited, and bypasses no access control.
 |---|---|---|---|
 | 1.1 | Does ProjectorRays handle **Afterburner-compressed Director 10.1** movies? | **RESOLVED — yes** | Its JavaScript port parsed all four movies: `read()` true, `afterburned` true, version 1000 (Director 10), 36 scripts recovered in total. See `implementation-plan.md` §Stage 1 results |
 | 1.2 | Does LibreShockwave parse our `SR_level_1.dcr`? | **UNKNOWN — and no longer urgent** | ProjectorRays already succeeded, so LibreShockwave is now a *cross-check* rather than a necessity. It remains the only candidate claiming Shockwave3D support, which matters for §2. Building it needs `cmake`, absent from this machine |
-| 1.3 | Can any tool export W3D **geometry**? | **NO — suspended after a failed decode attempt** | Container, scene graph, transforms and textures are decoded; geometry is not. Six encodings tested and ruled out (see `w3d-format.md`). The pre-set go/no-go — recover `car_shadow`'s four vertices — was not met, so the investigation is **stopped by design**. Fallback: rebuild needed models from the recovered names, hierarchy, transforms and textures |
+| 1.3 | Can any tool export W3D **geometry**? | **RESOLVED — yes** | [`macromelt`](https://github.com/Dilaz/macromelt) (Apache-2.0, Rust) decodes the arithmetic-coded CLOD payload. Pinned at `78f1ad6c…`; audited for network calls, `unsafe`, process spawning and writes outside its output path, and clean on all four. `tools/extract_mesh.sh` rebuilds the chain. The Mach 5 is **20 meshes, 4,454 triangles**. Our own reader still does not decode geometry; this question asked whether *any* tool could. Note the earlier **NO** rested on a wrong inference from a sound measurement — see `w3d-format.md` |
 | 1.4 | Is any hosted browser tool safe to hand an original artifact? | **RESOLVED for ProjectorRaysWeb — and then avoided entirely** | Source audit found **zero** network primitives (no `fetch`, `XMLHttpRequest`, `WebSocket`, `sendBeacon`, `FormData`, `Worker`, `eval`). Only external resource is `pako` from a CDN, loaded **without** Subresource Integrity — a residual supply-chain risk. Sidestepped by running the audited modules headlessly in Node with `pako` shimmed onto the built-in `zlib`: no browser, no CDN, no network |
 
 ---
@@ -76,7 +76,7 @@ Assumes one experienced developer, access to real sample files, and a working te
 | Useful geometry / material / texture exporter | ~4–8 weeks |
 | Reconstructing undocumented progressive-mesh decoding | may extend to 2–4 months or longer |
 
-Principal technical risks: progressive mesh / CLOD decoding; scene-node hierarchy and transform
+Principal technical risks: progressive mesh / CLOD decoding (**since resolved** — §1.3); scene-node hierarchy and transform
 composition; legacy materials, shaders, textures and UV mapping; coordinate-system conversion
 (Z-up → target convention); silent loss of unsupported features on export.
 
@@ -117,7 +117,7 @@ composition; legacy materials, shaders, textures and UV mapping; coordinate-syst
 | # | Question | Status | Next safe step |
 |---|---|---|---|
 | 4.1 | FLV pixel dimensions and true frame rate | **UNKNOWN** | `onMetaData` stores `width = 0`, `height = 0` and implausible `framerate`. Decode one frame |
-| 4.2 | Polygon counts, materials, textures, hierarchy in the `3DEM` worlds | **PARTIALLY RECOVERED** | Hierarchy and transforms read; **50 textures extracted as JPEG**; materials and shaders located but not decoded; polygon data still inside the undecoded `0x49` mesh block |
+| 4.2 | Polygon counts, materials, textures, hierarchy in the `3DEM` worlds | **RECOVERED** | Hierarchy and transforms read by our own reader; **50 textures extracted as JPEG**; geometry, materials and per-face assignments decoded by `macromelt` (§1.3). Mach 5: 20 meshes, 4,454 triangles, 10 materials over 6 textures. Track world: 760 meshes, decoded but not yet imported |
 | 4.3 | Audio sample rate, bit depth, channels, duration | **UNKNOWN** | Extract and inspect, after Stage 1 approval |
 | 4.4 | What the SWF members actually contain | **UNKNOWN** | Dump `FWS` payloads and inspect with ordinary SWF tooling |
 

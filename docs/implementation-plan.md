@@ -227,7 +227,9 @@ Dependencies installed: TypeScript, Vite, Three.js, Rapier (`@dimforge/rapier3d-
 | `src/sim/rng.ts` | Seeded PRNG; the simulation never calls `Math.random()` |
 | `src/sim/analytic-body.ts` | A reference body with no engine, so failures are attributable |
 | `src/physics/rapier-body.ts` | Rapier-backed chassis and raycast ground probe |
-| `src/render/scene.ts` | Three.js scene, chase camera, placeholder car behind `VehicleView` |
+| `src/render/scene.ts` | Three.js scene, chase camera, and the `VehicleView` boundary the car sits behind |
+| `src/render/mach5-original.ts` | The recovered Mach 5: gadget nodes, wheel placement, chassis assembly |
+| `src/render/model-frame.ts` | How the exported model hangs off the chassis — DOM-free, so it is testable |
 | `src/main.ts` | Accumulator loop: whole ticks for the sim, free frame rate for the renderer |
 
 ### Go/no-go: does Rapier earn its place?
@@ -260,8 +262,9 @@ grip, which earlier research had wrongly recorded as existing solely in `doEnemy
 
 - Playwright smoke test not yet written.
 - Performance not yet measured against a declared workload; no FPS claim is made.
-- The car is a placeholder at the recovered dimensions. The real mesh is blocked on
-  `docs/research/w3d-format.md`.
+- The track is still built from generated segments; the original's 760-mesh track world decodes
+  but has not been imported.
+- Rival AI not yet written: `doEnemy` is decompiled but nothing drives against the player.
 
 ---
 
@@ -301,7 +304,11 @@ expected to be deterministic — not a blind diff of serialized objects carrying
 Mach 5 controller matching the Stage 2 contract; one segment chain; collision with static props;
 damage / oxygen / score HUD; one gadget (**Jacks** — the simplest and most clearly evidenced).
 
-Art is **our own or placeholder**. Never extracted assets.
+Art was to be **our own or placeholder**, never extracted assets. **That changed, deliberately.**
+Once the W3D geometry proved decodable (`docs/research/w3d-format.md`), the project chose to use
+the original models rather than approximate them, and the repository tracks them. The reasoning and
+the limits are in `docs/research/project-brief.md` under the asset policy; this line is kept rather
+than deleted so the change of position is visible.
 
 **Acceptance:** a playable 60-second run exists; Vitest covers the rules engine; one Playwright
 smoke test passes; a written comparison against reference footage records where the feel diverges.

@@ -116,7 +116,42 @@ Vertex and face counts are confirmed against the simplest cases: `car_shadow` is
 Euler characteristic `V − E + F = 104 − 306 + 204 = 2` is exactly that of a closed surface. The
 same check fails on most other models, which is expected: game meshes are usually open.
 
-## Mesh payload (`0x49`) — NOT DECODED, and now bounded
+## Mesh payload (`0x49`) — DECODED
+
+**It is arithmetic-coded progressive (CLOD) geometry, and `macromelt` decodes it.**
+
+[`macromelt`](https://github.com/Dilaz/macromelt) (Apache-2.0) is a Rust decoder for Director's
+Shockwave 3D cast members. It reads these payloads outright. `tools/extract_mesh.sh` rebuilds the
+whole chain — original `.dcr` → `XMED` chunk → `macromelt` → glTF 2.0 — and the revision is pinned
+at `78f1ad6c5e8ce8b4f9a36dd1a25ca8682f3976e6`. Do not build from `main` without re-auditing.
+
+What the audit found, and why this is the one third-party decoder the project uses: no network
+calls, no `unsafe`, no process spawning, writes only to its output path. It runs locally, needs no
+Director installation and touches no copy-protection mechanism. It also has **no Director version
+gate**, which is why it works on our 10.1 files although its README speaks of 8.x.
+
+The Mach 5 — `SR_level_1` resource 7589 — comes out as **20 meshes, 46 primitives, 4,454 triangles,
+5,194 vertices**, with 10 materials over 6 textures. The track world's 760 meshes decode as well.
+
+### The reasoning below was wrong, and this is where it went wrong
+
+The analysis in the rest of this section concluded that the payload was **not** cleanly
+entropy-coded, on the strength of a bit-level entropy measurement: `car_shadow` scored 0.721 and
+`collider` 0.979 against 1.0000 for random and zlib data, and the inference drawn was that "a range
+coder's output is bit-uniform, so a measurable bit bias argues against one."
+
+**That inference does not hold.** A range coder's output approaches bit-uniformity only in the
+limit of a well-matched model and enough output. These payloads are neither: `car_shadow`'s is 132
+bytes, and the coder is adaptive against a strongly skewed model, so it spends most of its length
+still converging. A short arithmetic-coded stream can carry exactly the bias that was measured. The
+measurement was sound; the conclusion drawn from it was not, and it is what sent the investigation
+to a stop one step short of the answer.
+
+The rest of this section is kept because what it *ruled out* is still true and still useful — the
+payload is not raw floats, not a fixed stride, not deflate, not bit-packed quantised coordinates and
+not LEB128. Only the final verdict was wrong.
+
+### The original analysis, retained
 
 Every payload begins with the same shape: `04`, one byte in `0x00`–`0x07`, two bytes, then `00 00`.
 After that, three measurements rule out the easy interpretations:
@@ -190,13 +225,14 @@ establish is a list of what the payload is *not*, so this ground need not be cov
 **Where that leaves it.** The payload is structured but does not match any standard shape, and there
 is no ground truth to check a guess against beyond vertex and face counts.
 
-**This is the documented stopping point.** A go/no-go criterion was set *before* the attempt —
+**This was the documented stopping point.** A go/no-go criterion was set *before* the attempt —
 recover `car_shadow`'s four vertices with matching counts and topology. It was not met, so geometry
-decoding is **suspended by design rather than abandoned mid-stream**. The fallback is to rebuild the
-models that are needed, using the node names, hierarchy, transforms and textures already recovered.
+decoding was suspended by design rather than abandoned mid-stream, with the fallback of rebuilding
+the needed models by hand from the recovered names, hierarchy, transforms and textures.
 
-**What is not blocked by it.** Node names, hierarchy, transforms, materials, shaders, lights,
-cameras and all 50 textures are already recovered.
+That fallback was built, and then superseded: `macromelt` decodes the payload, so the geometry is
+recovered rather than reconstructed. The hand-built car survives in `src/render/mach5.ts` as the
+fallback for a missing model file, not as the car.
 
 ---
 
@@ -207,8 +243,8 @@ cameras and all 50 textures are already recovered.
 | Walk the container, enumerate blocks | **Working** |
 | Read the scene graph: names, parents, transforms | **Working** |
 | Extract textures as JPEG | **Working** — 50 images |
-| Read materials, shaders, lights, cameras | **Partial** — located, not decoded |
-| Extract geometry | **Not yet** — `0x49` undecoded |
+| Read materials, shaders, lights, cameras | **Partial** — located, not decoded by our own reader |
+| Extract geometry | **Working** — via `macromelt`; 20 meshes and 4,454 triangles for the Mach 5 |
 
 ### The Mach 5 scene graph, recovered
 
@@ -230,4 +266,9 @@ The track world carries `ROAD_Brown`, `ROAD_Blue`, `ROAD_Dirt`, `ROAD_DirtBlue`,
 This is **suggestive** for the surface `effectID` mapping in `handling-contract.md` §6 — road,
 dirt, ice, snow, grass, underwater sand and water all exist as distinct materials. It does **not**
 settle the mapping: the numeric IDs are mesh face indices, and nothing recovered so far links an
-index to a material name. That link, if it exists, is likely inside the undecoded `0x49` blocks.
+index to a material name.
+
+That link was expected to be inside the `0x49` blocks, which are now decodable — so this is a
+**reachable** open question rather than a blocked one. The track world decodes to 760 meshes with
+per-face material assignments; reading the face index to material name mapping out of them is the
+next step whenever the surface table needs settling.

@@ -48,22 +48,28 @@ Every XMED resource is accounted for; none is unclassified.
 
 ---
 
-## 2. 3D worlds — VERIFIED (located, not extracted)
+## 2. 3D worlds — VERIFIED (located; the Mach 5 extracted)
 
 Four payloads begin with the signature `3DEM` followed by `IFX `.
 
 | Movie | Resource ID | Payload bytes | Interpretation |
 |---|---:|---:|---|
-| `SR_level_1.dcr` | 7587 | 2552084 | **The level** — track geometry and props (INFERRED from size) |
-| `SR_level_1.dcr` | 7589 | 206268 | 3D world, likely the Mach 5 (INFERRED) |
-| `SR_level_1.dcr` | 7591 | 104584 | 3D world, likely the rival car (INFERRED) |
+| `SR_level_1.dcr` | 7587 | 2552084 | **The level** — track geometry and props. 760 meshes; decodes, not yet imported |
+| `SR_level_1.dcr` | 7589 | 206268 | **The Mach 5** — VERIFIED, 20 models matching `doMach5`'s properties one for one |
+| `SR_level_1.dcr` | 7591 | 104584 | The rival car — 9 models (INFERRED from the node names) |
 | `SR_MAIN.dcr` | 5143 | 200236 | Front-end showcase car (INFERRED) |
 
 `3DEM` is the Director Shockwave-3D cast-member stream; `IFX ` is Intel's Interactive-FX container.
 
-**UNKNOWN:** polygon counts, material and shader details, texture references, node hierarchy,
-animation data, coordinate convention, and whether any of it can be converted. See
-`docs/research/open-questions.md`.
+**Extracted so far:** resource 7589, the Mach 5, as `public/models/mach5.glb` — 20 meshes, 46
+primitives, 4,454 triangles, 5,194 vertices, 10 materials over 6 textures.
+`tools/extract_mesh.sh` regenerates it from the original artifact; `docs/research/w3d-format.md`
+documents the format and the decoder.
+
+**Still open:** the coordinate convention is recovered in practice (Director is Z-up; the exporter
+writes a −90° X rotation on `SceneRoot` to satisfy glTF's Y-up requirement, which the renderer
+clears), but animation data has not been looked at, and the face-index to material-name link that
+the surface `effectID` table needs has not been read out. See `docs/research/open-questions.md`.
 
 > **Format lineage is not binary compatibility.** Shockwave 3D W3D originated from Intel's IFX
 > toolkit lineage, and U3D (ECMA-363) was derived primarily from the related Shockwave 3D format.
@@ -199,16 +205,26 @@ The full cue name list is catalogued in `docs/research/gameplay-spec.md` §11.
 
 ---
 
-## 8. What has NOT been extracted
+## 8. What has and has not been extracted
 
-Nothing has. Specifically:
+This section was written when the answer was "nothing". It no longer is. Extraction proceeded
+stage by stage with approval, and the repository tracks the results by the owner's explicit
+decision — see `docs/research/project-brief.md` for the asset policy.
 
-- No `3DEM` / `IFX ` payload written to disk or converted.
+**Extracted:**
+
+- **Lingo scripts** — 36 recovered, in `original_game/decompiled/`. They are the source of every
+  constant tagged `RECOVERED` in `src/sim/constants.ts`.
+- **One `3DEM` world** — resource 7589, the Mach 5, converted to glTF at `public/models/mach5.glb`
+  (§2). Its 50 sibling textures were extracted as JPEG during format research.
+
+**Not extracted:**
+
 - No `FWS` / SWF payload dumped.
-- No bitmap decoded.
+- No bitmap decoded beyond the 3D world textures.
 - No sound decoded.
 - No FLV frame decoded.
-- No Lingo script decompiled.
+- The track world (7587), the rival car (7591) and the showcase car (5143) decode but have not
+  been imported.
 
-**Next safe step:** see `docs/implementation-plan.md` for the Stage 1 decompiler evaluation, which
-requires separate approval before any extraction occurs.
+**Next step:** the track mesh. It is the same chain as the Mach 5 and needs no new tooling.

@@ -21,10 +21,12 @@ import {
 } from './physics/rapier-body.js';
 import {
   ChaseCamera,
-  PlaceholderCar,
   createPropViews,
   createScene,
+  type VehicleView,
 } from './render/scene.js';
+import { Mach5 } from './render/mach5.js';
+import { OriginalMach5 } from './render/mach5-original.js';
 
 const SEGMENTS = 6;
 const TRACK_HALF_WIDTH = 18;
@@ -141,7 +143,34 @@ async function main(): Promise<void> {
   });
 
   const scene = createScene(SEGMENTS, TRACK_HALF_WIDTH);
-  const car = new PlaceholderCar();
+
+  // Prefer the model recovered from the game's own 3D world. The hand-built
+  // one stays as a fallback rather than being deleted, so a missing or broken
+  // GLB degrades to a drivable car instead of a blank screen.
+  let car: VehicleView;
+  try {
+    const original = await OriginalMach5.load();
+    const { missing, uprighted, centerOfMass } = original.report();
+    if (missing.length) {
+      console.warn('recovered model is missing nodes:', missing);
+    }
+    if (!uprighted) {
+      console.warn(
+        'SceneRoot not found in the GLB: the Y-up conversion was not cleared, ' +
+          'so the car will render on its side.',
+      );
+    }
+    if (centerOfMass.z === 0) {
+      console.warn(
+        'the collider hull gave no centre of mass: the body will ride high and ' +
+          'its wheels will hang below it.',
+      );
+    }
+    car = original;
+  } catch (err) {
+    console.warn('falling back to the hand-built car:', err);
+    car = new Mach5();
+  }
   scene.add(car.object);
   const propViews = createPropViews(scene, track.segments);
 
@@ -160,6 +189,9 @@ async function main(): Promise<void> {
 
   const input = createInput();
   let wheelSpin = 0;
+  /** Eased steering for the front wheels. The original eased pWheelTurn by 0.2
+   *  per update toward -1, 0 or 1; this is the same shape, frame-rate scaled. */
+  let wheelTurn = 0;
   let accumulator = 0;
   let last = performance.now();
   /** Never advance more than this in one frame, so a stall cannot cascade. */
@@ -189,6 +221,9 @@ async function main(): Promise<void> {
     const r = world.race;
 
     wheelSpin += (v.forwardVel / K.WHEEL_RADIUS) * K.WHEEL_SPIN_COEFF * elapsed;
+
+    const steerTarget = (input.state.right ? 1 : 0) - (input.state.left ? 1 : 0);
+    wheelTurn += (steerTarget - wheelTurn) * Math.min(1, 6 * elapsed);
     car.update(chassis.position, chassis.forward, chassis.up, {
       forwardVel: v.forwardVel,
       grounded: v.grounded,
@@ -197,7 +232,11 @@ async function main(): Promise<void> {
       gripActive: v.gadgets.grip.active,
       lightsActive: v.gadgets.lights.active,
       shieldActive: v.gadgets.deflector.active || v.gadgets.frogger.active,
+      frogger: v.gadgets.frogger.active,
+      robotLaunched: v.justActivated.includes('robot'),
       wheelSpin,
+      hoverDistances: v.hoverDistances,
+      wheelTurn,
     });
     chase.follow(chassis.position, chassis.forward, 1 - Math.exp(-8 * elapsed));
 

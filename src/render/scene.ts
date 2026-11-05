@@ -5,10 +5,11 @@
  * it never advances it - that is the boundary the replay tests rely on, and the
  * reason frame rate cannot change the outcome.
  *
- * The car is a placeholder. The real Mach 5 is 20 separate models inside a
- * Shockwave 3D world whose mesh encoding is not decoded; see
- * `docs/research/w3d-format.md`. The placeholder sits behind `VehicleView` so it
- * can be replaced without touching anything else.
+ * The car lives behind the `VehicleView` interface declared here, so it can be
+ * swapped without touching anything else. Two implementations use it: the
+ * recovered Mach 5 in `mach5-original.ts` - 20 models decoded out of the game's
+ * own Shockwave 3D world - and the hand-built one in `mach5.ts`, kept as the
+ * fallback for when the model file is missing. See `docs/research/w3d-format.md`.
  */
 
 import * as THREE from 'three';
@@ -29,132 +30,21 @@ export interface VehicleViewState {
   bladesActive: boolean;
   gripActive: boolean;
   lightsActive: boolean;
+  /** Deflector or Frogger: either closes the cockpit canopy. */
   shieldActive: boolean;
+  /** Frogger specifically, which also raises the periscope. */
+  frogger: boolean;
+  /** True on the frame the Robot is launched. */
+  robotLaunched: boolean;
   wheelSpin: number;
-}
-
-/**
- * A blocked-out car at the recovered dimensions.
- *
- * The proportions are not invented: track width, wheelbase and wheel radius are
- * recovered constants, so the placeholder is the right size even though it is
- * the wrong shape.
- */
-export class PlaceholderCar implements VehicleView {
-  readonly object = new THREE.Group();
-  private readonly wheels: THREE.Mesh[] = [];
-  private readonly jacks: THREE.Mesh;
-
-  constructor() {
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(K.TRACK_WIDTH, K.WHEELBASE_FRONT * 2, 0.5),
-      new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.4, metalness: 0.1 }),
-    );
-    body.position.z = 0.1;
-    body.castShadow = true;
-    this.object.add(body);
-
-    // The red "M" the car is known for, as a flat marker on the hood.
-    const marker = new THREE.Mesh(
-      new THREE.BoxGeometry(K.TRACK_WIDTH * 0.5, 0.5, 0.02),
-      new THREE.MeshStandardMaterial({ color: 0xcc1111 }),
-    );
-    marker.position.set(0, K.WHEELBASE_FRONT * 0.45, 0.36);
-    this.object.add(marker);
-
-    const wheelGeom = new THREE.CylinderGeometry(
-      K.WHEEL_RADIUS,
-      K.WHEEL_RADIUS,
-      0.25,
-      16,
-    );
-    wheelGeom.rotateZ(Math.PI / 2);
-    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
-
-    const xs = [-K.TRACK_WIDTH / 2, K.TRACK_WIDTH / 2];
-    const ys = [K.WHEELBASE_FRONT, -K.WHEELBASE_REAR];
-    for (const y of ys) {
-      for (const x of xs) {
-        const wheel = new THREE.Mesh(wheelGeom, wheelMat);
-        wheel.position.set(x, y, -0.1);
-        wheel.castShadow = true;
-        this.wheels.push(wheel);
-        this.object.add(wheel);
-      }
-    }
-
-    this.jacks = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.08, 0.08, 1.0, 8),
-      new THREE.MeshStandardMaterial({ color: 0xdddd33 }),
-    );
-    this.jacks.position.z = -0.6;
-    this.jacks.visible = false;
-    this.object.add(this.jacks);
-
-    // Each gadget gets a crude but distinct tell, so that activating one is
-    // visible on the car and not only in the HUD. The real models exist in the
-    // undecoded W3D world as separate nodes - saw, grips, lights, shield.
-    this.blades = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.3, 1.3, 0.08, 20),
-      new THREE.MeshStandardMaterial({ color: 0xb8c4cc, metalness: 0.8, roughness: 0.3 }),
-    );
-    this.blades.rotation.x = Math.PI / 2;
-    this.blades.position.set(0, K.WHEELBASE_FRONT * 0.6, 0);
-    this.blades.visible = false;
-    this.object.add(this.blades);
-
-    this.shield = new THREE.Mesh(
-      new THREE.SphereGeometry(1.9, 20, 12),
-      new THREE.MeshStandardMaterial({
-        color: 0x66ccff,
-        transparent: true,
-        opacity: 0.22,
-        emissive: 0x113355,
-      }),
-    );
-    this.shield.visible = false;
-    this.object.add(this.shield);
-
-    this.headlights = new THREE.Mesh(
-      new THREE.ConeGeometry(1.6, 7, 14, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: 0xfff0b0,
-        transparent: true,
-        opacity: 0.16,
-        side: THREE.DoubleSide,
-      }),
-    );
-    this.headlights.rotation.x = -Math.PI / 2;
-    this.headlights.position.set(0, K.WHEELBASE_FRONT + 3.3, 0.1);
-    this.headlights.visible = false;
-    this.object.add(this.headlights);
-  }
-
-  private readonly blades: THREE.Mesh;
-  private readonly shield: THREE.Mesh;
-  private readonly headlights: THREE.Mesh;
-
-  update(position: Vec3, forward: Vec3, _up: Vec3, state: VehicleViewState): void {
-    this.object.position.set(position.x, position.y, position.z);
-    // Yaw only: the placeholder does not need the full orientation to read well.
-    this.object.rotation.set(0, 0, Math.atan2(-forward.x, forward.y));
-
-    for (const wheel of this.wheels) {
-      wheel.rotation.x = state.wheelSpin;
-      // Grip tyres: the original shows four extra models. A colour change is
-      // enough of a tell for a placeholder.
-      (wheel.material as THREE.MeshStandardMaterial).color.setHex(
-        state.gripActive ? 0x9a6b2a : 0x1a1a1a,
-      );
-    }
-
-    this.jacks.visible = state.jacksExtended;
-    this.shield.visible = state.shieldActive;
-    this.headlights.visible = state.lightsActive;
-
-    this.blades.visible = state.bladesActive;
-    if (state.bladesActive) this.blades.rotation.z += 0.6;
-  }
+  /**
+   * Per-wheel suspension hit distance, in `WHEEL_LOCAL_POINTS` order. The
+   * original placed each wheel model by this every frame rather than authoring
+   * it in the scene, which is why the exported wheel nodes sit at the origin.
+   */
+  hoverDistances: readonly number[];
+  /** Eased steering, -1..1, for turning the front wheels. Cosmetic. */
+  wheelTurn: number;
 }
 
 /** A chase camera that trails the car, smoothed per rendered frame. */
