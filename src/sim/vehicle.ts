@@ -280,6 +280,18 @@ function updateSteering(
   body: ChassisBody,
   input: VehicleInput,
 ): void {
+  // The original splits here, at `forwardVel >= 0` (line 690) against
+  // `forwardVel < 0` (line 713). The two branches differ in three ways, and
+  // treating them as one handler steered the car the wrong way in reverse.
+  const reversing = state.forwardVel < 0;
+
+  if (reversing && (state.powerCoeff === 0 || input.forward)) {
+    // Backing up only steers with a wheel on the ground and the forward key
+    // up. Neither branch of the original runs otherwise, so the ramp is left
+    // exactly as it is - not decayed - and nothing is applied.
+    return;
+  }
+
   const turning = input.left !== input.right; // both held cancels out
   if (!turning) {
     state.turnBuild = Math.max(
@@ -289,10 +301,14 @@ function updateSteering(
     return;
   }
 
-  state.turnBuild = Math.min(K.TURN_BUILD_CAP, state.turnBuild + K.TURN_BUILD_STEP);
+  state.turnBuild = Math.min(
+    reversing ? K.REVERSE_TURN_BUILD_CAP : K.TURN_BUILD_CAP,
+    state.turnBuild + (reversing ? K.REVERSE_TURN_BUILD_STEP : K.TURN_BUILD_STEP),
+  );
 
   // Yaw authority falls off as the current yaw rate approaches a speed-dependent
   // limit, so the car cannot be spun arbitrarily fast by holding a direction.
+  // The limit keeps the key's own sign in both branches, as the original does.
   const yawRate = body.angularVelocity.z;
   const sign = input.right ? -1 : 1;
   const limit = state.forwardVel * K.YAW_RATE_COEFF * sign;
@@ -302,7 +318,9 @@ function updateSteering(
     authority = Math.min(1, 1 - Math.min(1, yawRate / limit));
   }
 
-  const magnitude = body.mass * authority * state.turnBuild * sign;
+  // The impulse does not: backing up swings the car the other way for the same
+  // key, which is the whole difference between the two branches.
+  const magnitude = body.mass * authority * state.turnBuild * (reversing ? -sign : sign);
   body.applyAngularImpulse(vec3(0, 0, magnitude));
 }
 

@@ -235,6 +235,17 @@ export const TURN_BUILD_DECAY = 0.2;
 /** RECOVERED - ...down to this floor. */
 export const TURN_BUILD_FLOOR = 0.2;
 /**
+ * RECOVERED - reversing fills the ramp in one jump rather than creeping up.
+ *
+ * `doMach5` has two steering branches, and they are not the same handler with
+ * a sign flipped. Going forward the ramp creeps by 0.009 a tick to a cap of
+ * 0.75 (line 693); backing up it jumps 0.2 a tick to a cap of 1 (line 715), so
+ * the car swings round quickly when parking and reluctantly at speed.
+ */
+export const REVERSE_TURN_BUILD_STEP = 0.2;
+export const REVERSE_TURN_BUILD_CAP = 1;
+
+/**
  * RECOVERED - yaw authority falls as the yaw rate approaches
  * `forwardVel * 0.07`, which makes steering speed-sensitive.
  */
