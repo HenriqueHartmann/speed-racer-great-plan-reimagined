@@ -80,6 +80,16 @@ PY
 echo "==> decoding the Mach 5"
 "$MACROMELT" "$WORK/xmed/SR_level_1_7589.xmed" --export-glb "$OUT/mach5.glb"
 
+# 4. Decode the track. Resource 7587 is the level: 760 models, of which the 37
+#    named SEG_1..SEG_37 are the drivable surface.
+echo "==> decoding the track"
+"$MACROMELT" "$WORK/xmed/SR_level_1_7587.xmed" --export-glb "$OUT/track.glb"
+
+# 5. Reduce it to the ground data the simulation reads. The renderer uses the
+#    .glb; src/sim/ must never need a glTF loader.
+echo "==> building the ground data"
+node "$ROOT/tools/build_track_ground.mjs" "$OUT/track.glb" "$OUT/track-ground.bin"
+
 echo
-echo "wrote $OUT/mach5.glb"
-sha256sum "$OUT/mach5.glb"
+echo "wrote:"
+sha256sum "$OUT/mach5.glb" "$OUT/track.glb" "$OUT/track-ground.bin"

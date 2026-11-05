@@ -157,3 +157,81 @@ export function flatGroundMesh(segments: number, halfWidth = 18, effectId = 1): 
 
   return { positions, indices, surfaceIds, segmentStart, segmentEnd, segmentCount: segments };
 }
+
+/** `"SRTG"`, little-endian, as the generator writes it. */
+const MAGIC = 0x47_54_52_53;
+const VERSION = 1;
+/** Header: magic, version, three counts, then the spawn point. */
+const HEADER_BYTES = 32;
+
+/**
+ * Read `public/models/track-ground.bin`, as `tools/build_track_ground.mjs`
+ * writes it.
+ *
+ * Every malformed shape is refused here rather than carried into the
+ * simulation. A ground file that is wrong in the middle does not announce
+ * itself: it surfaces as a car falling through the world a minute into a run,
+ * which is the worst possible place to learn about it.
+ *
+ * Takes `Uint8Array` so the browser's `fetch` and a test's `readFileSync` hand
+ * it the same type without a cast.
+ */
+export function parseGroundMesh(bytes: Uint8Array): GroundMesh & { spawn: Vec3 } {
+  if (bytes.byteLength < HEADER_BYTES) throw new Error('ground data truncated: no header');
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== MAGIC) throw new Error('ground data: bad magic');
+
+  const version = view.getUint32(4, true);
+  if (version !== VERSION) throw new Error(`ground data: unsupported version ${version}`);
+
+  const segmentCount = view.getUint32(8, true);
+  const triangleCount = view.getUint32(12, true);
+  const vertexCount = view.getUint32(16, true);
+  const spawn = vec3(view.getFloat32(20, true), view.getFloat32(24, true), view.getFloat32(28, true));
+
+  // `surfaceIds` is bytes; the segment ranges after it are uint32, so it is
+  // padded up to keep them aligned.
+  const idsPadded = Math.ceil(triangleCount / 4) * 4;
+  const expected =
+    HEADER_BYTES + vertexCount * 12 + triangleCount * 12 + idsPadded + segmentCount * 8;
+  if (bytes.byteLength !== expected) {
+    throw new Error(
+      `ground data: size ${bytes.byteLength} does not match its counts, which need ${expected}`,
+    );
+  }
+
+  let at = bytes.byteOffset + HEADER_BYTES;
+  const positions = new Float32Array(bytes.buffer, at, vertexCount * 3);
+  at += vertexCount * 12;
+  const indices = new Uint32Array(bytes.buffer, at, triangleCount * 3);
+  at += triangleCount * 12;
+  const surfaceIds = new Uint8Array(bytes.buffer, at, triangleCount);
+  at += idsPadded;
+  const segmentStart = new Uint32Array(bytes.buffer, at, segmentCount);
+  at += segmentCount * 4;
+  const segmentEnd = new Uint32Array(bytes.buffer, at, segmentCount);
+
+  for (let i = 0; i < positions.length; i++) {
+    if (!Number.isFinite(positions[i]!)) throw new Error(`ground data: coordinate ${i} is not finite`);
+  }
+  for (let i = 0; i < indices.length; i++) {
+    if (indices[i]! >= vertexCount) {
+      throw new Error(`ground data: index ${indices[i]} past the ${vertexCount} vertices`);
+    }
+  }
+  if (segmentCount === 0 || segmentStart[0] !== 0) {
+    throw new Error('ground data: segment ranges must start at triangle 0');
+  }
+  for (let s = 0; s < segmentCount; s++) {
+    if (segmentEnd[s]! < segmentStart[s]!) throw new Error(`ground data: segment ${s + 1} ends before it starts`);
+    if (s + 1 < segmentCount && segmentEnd[s] !== segmentStart[s + 1]) {
+      throw new Error(`ground data: segment ${s + 1} does not meet segment ${s + 2}`);
+    }
+  }
+  if (segmentEnd[segmentCount - 1] !== triangleCount) {
+    throw new Error('ground data: the segments do not account for every triangle');
+  }
+
+  return { positions, indices, surfaceIds, segmentStart, segmentEnd, segmentCount, spawn };
+}
