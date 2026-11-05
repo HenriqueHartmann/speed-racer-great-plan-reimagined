@@ -101,6 +101,40 @@ describe('Rapier backend', () => {
     }
   });
 
+  it('does not steer itself while standing still', () => {
+    // A stiff explicit suspension against too little rotational inertia makes
+    // the chassis rock, and the rocking couples into a steady yaw: the car
+    // turns on its own. This was real - 39 degrees of drift over ten seconds -
+    // and is what CHASSIS_INERTIA_MULTIPLIER exists to prevent.
+    const host = new RapierWorld(rapier);
+    host.addGroundPlane();
+    const chassis = new RapierChassis(rapier, host, vec3(0, 0, K.SPAWN_HEIGHT));
+    const world = new World({
+      seed: SEED,
+      body: chassis,
+      probe: new RapierGround(rapier, host, chassis),
+      stepPhysics: () => host.step(),
+    });
+
+    for (let t = 0; t < 300; t++) {
+      world.step({
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        jacks: false,
+      });
+    }
+
+    const f = chassis.forward;
+    const yawDeg = Math.abs((Math.atan2(-f.x, f.y) * 180) / Math.PI);
+    expect(yawDeg).toBeLessThan(1);
+    // And it should still be sitting on the ground, not have bounced away.
+    expect(chassis.position.z).toBeGreaterThan(0);
+    expect(chassis.position.z).toBeLessThan(K.HOVER_DISTANCE * 2);
+    host.free();
+  });
+
   it('keeps the chassis hovering rather than resting on the collider', () => {
     const run = runRapierRace(1);
     // The suspension should hold the body near its rest height, not let it sink.

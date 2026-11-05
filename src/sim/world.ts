@@ -13,11 +13,14 @@ import {
   createVehicleState,
   stepVehicle,
   NO_INPUT,
+  vec3,
   type ChassisBody,
   type GroundProbe,
   type VehicleInput,
   type VehicleState,
 } from './vehicle.js';
+import { overlaps, resolveImpact } from './collision.js';
+import { segmentIndexFor, type Track } from './track.js';
 
 /** Why a run ended. */
 export type Outcome = 'running' | 'finished' | 'destroyed' | 'fell';
@@ -75,6 +78,8 @@ export interface WorldOptions {
   probe: GroundProbe;
   /** Advances the physics backend by `dt`; omitted in pure-controller tests. */
   stepPhysics?: (dt: number) => void;
+  /** Supplies props and segment transitions; omitted on a bare plane. */
+  track?: Track;
 }
 
 export class World {
@@ -87,7 +92,20 @@ export class World {
   private readonly body: ChassisBody;
   private readonly probe: GroundProbe;
   private readonly stepPhysics: ((dt: number) => void) | undefined;
+  private readonly track: Track | undefined;
   private lastEffectId = -1;
+  /** Simulated seconds until collisions are heeded again - the 60-tick debounce. */
+  private collisionCooldown = 0;
+  /**
+   * Props the car is currently inside.
+   *
+   * The original received discrete collision events from Havok, so an impact
+   * fired once on contact. An overlap test fires every tick while the car stays
+   * inside a prop, which is not the same thing: a car resting against a wall
+   * would burn the debounce at zero speed and then be immune. Tracking entry
+   * restores event semantics.
+   */
+  private touching = new Set<number>();
 
   constructor(opts: WorldOptions) {
     this.rng = new Rng(opts.seed);
@@ -96,6 +114,7 @@ export class World {
     this.body = opts.body;
     this.probe = opts.probe;
     this.stepPhysics = opts.stepPhysics;
+    this.track = opts.track;
   }
 
   /** Advance exactly one tick. */
@@ -122,8 +141,83 @@ export class World {
       });
     }
 
+    this.updateCollisions(input);
     this.updateRace();
     this.tick++;
+  }
+
+  /**
+   * Resolve contacts against the active segment's props.
+   *
+   * Only the car's own segment is consulted, which is the original's behaviour
+   * and means props in adjacent segments are intangible.
+   */
+  private updateCollisions(input: VehicleInput): void {
+    if (!this.track) return;
+
+    if (this.collisionCooldown > 0) {
+      this.collisionCooldown = Math.max(0, this.collisionCooldown - K.TICK_DT);
+    }
+
+    const carHalf = vec3(K.TRACK_WIDTH / 2, K.WHEELBASE_FRONT, 0.5);
+    const pos = this.body.position;
+    const stillTouching = new Set<number>();
+
+    for (const prop of this.track.collidableProps()) {
+      if (!overlaps(pos, carHalf, prop.position, prop.halfExtent)) continue;
+      stillTouching.add(prop.id);
+
+      // Pickups ignore the debounce: they are consumed on contact, so there is
+      // nothing to re-trigger.
+      if (prop.kind === 'pickup') {
+        prop.active = false;
+        this.applyPickup(prop.pickup);
+        continue;
+      }
+
+      // Only the moment of entry counts as an impact.
+      if (this.touching.has(prop.id)) continue;
+      if (this.collisionCooldown > 0) continue;
+
+      const outcome = resolveImpact(prop, {
+        forwardVel: this.vehicle.forwardVel,
+        reverseHeld: input.backward,
+        hasBlades: this.vehicle.hasBlades,
+      });
+
+      if (outcome.yawCut !== 1) {
+        const av = this.body.angularVelocity;
+        this.body.angularVelocity = vec3(av.x, av.y, av.z * outcome.yawCut);
+      }
+      if (outcome.consume) prop.active = false;
+      if (outcome.damage > 0) this.addDamage(outcome.damage);
+
+      this.collisionCooldown = K.COLLISION_DEBOUNCE_SECONDS;
+    }
+
+    this.touching = stillTouching;
+  }
+
+  private applyPickup(kind: string | undefined): void {
+    switch (kind) {
+      case 'wrench':
+        this.repair();
+        break;
+      case 'oxygen':
+        this.collectOxygen();
+        break;
+      case 'candyRed':
+      case 'candyPurple':
+        this.race.score += K.REPAIR_SCORE;
+        this.events.push({
+          tick: this.tick,
+          kind: 'repair',
+          value: this.race.score,
+        });
+        break;
+      default:
+        break;
+    }
   }
 
   /** Advance `n` ticks, pulling input per tick. */
@@ -135,7 +229,12 @@ export class World {
     const r = this.race;
     const y = this.body.position.y;
 
-    r.segment = Math.floor(y / K.SEGMENT_LENGTH) + 1;
+    const segment = segmentIndexFor(y);
+    if (segment !== r.segment) {
+      r.segment = segment;
+      // The original's `doM5ChangeSegment`: swap which props are collidable.
+      this.track?.changeSegment(segment);
+    }
 
     // Wrong way: the original tracks the furthest Y ever reached and warns when
     // the car falls more than the margin behind it, then resets the maximum.

@@ -31,8 +31,19 @@ export class RapierWorld {
   constructor(private readonly rapier: R) {
     // Z-up, matching the original's convention, so recovered numbers transfer.
     this.world = new rapier.World({ x: 0, y: 0, z: K.GRAVITY_Z });
-    // One Rapier step per simulation tick, with the tick's dt. No accumulator.
-    this.world.timestep = K.TICK_DT;
+    // The original called havok.step(0.025, 5): it advanced TIMESTEP seconds of
+    // simulated time per frame, split into five internal sub-steps.
+    //
+    // Note that TIMESTEP is not the tick's wall-clock duration. At the movie's
+    // 30 fps tempo the original advanced 0.75 s of simulated time per real
+    // second, and every force constant was tuned against that. Advancing
+    // TICK_DT instead would make the whole car 33% more powerful than the
+    // numbers it was tuned with.
+    //
+    // The five-way split also matters on its own: the suspension is a stiff
+    // explicit spring, and integrating it in one coarse step makes it oscillate
+    // in pitch and roll.
+    this.world.timestep = K.TIMESTEP / K.SUBSTEPS;
   }
 
   /**
@@ -44,9 +55,22 @@ export class RapierWorld {
    * back down. Thickness plus CCD on the chassis is what keeps that honest.
    */
   addGroundPlane(halfExtent = 2000, thickness = 50): RAPIER.Collider {
+    return this.addGroundStrip(halfExtent, halfExtent, 0, thickness);
+  }
+
+  /**
+   * A drivable strip rather than an infinite plane, so leaving the track means
+   * falling - which is what makes the recovered fall-death rule reachable.
+   */
+  addGroundStrip(
+    halfWidth: number,
+    halfLength: number,
+    centreY: number,
+    thickness = 50,
+  ): RAPIER.Collider {
     const body = this.world.createRigidBody(this.rapier.RigidBodyDesc.fixed());
-    const desc = this.rapier.ColliderDesc.cuboid(halfExtent, halfExtent, thickness)
-      .setTranslation(0, 0, -thickness)
+    const desc = this.rapier.ColliderDesc.cuboid(halfWidth, halfLength, thickness)
+      .setTranslation(0, centreY, -thickness)
       .setFriction(0)
       .setRestitution(0);
     return this.world.createCollider(desc, body);
@@ -57,8 +81,39 @@ export class RapierWorld {
     this.dynamicBodies.push(body);
   }
 
+  /**
+   * A static box collider for a track prop.
+   *
+   * Damage is decided by the simulation's own overlap test, mirroring the
+   * original's script-side handler. This exists so the prop also physically
+   * stops the car, which the overlap test alone does not do.
+   */
+  addStaticBox(
+    centre: { x: number; y: number; z: number },
+    halfExtent: { x: number; y: number; z: number },
+  ): RAPIER.Collider {
+    const body = this.world.createRigidBody(this.rapier.RigidBodyDesc.fixed());
+    const desc = this.rapier.ColliderDesc.cuboid(
+      halfExtent.x,
+      halfExtent.y,
+      halfExtent.z,
+    )
+      .setTranslation(centre.x, centre.y, centre.z)
+      // The original gave the chassis no contact friction or restitution; props
+      // match, so hitting one scrubs speed through the impact rather than
+      // sticking or bouncing.
+      .setFriction(0)
+      .setRestitution(0);
+    return this.world.createCollider(desc, body);
+  }
+
+  /** Remove a collider, for props consumed during play. */
+  removeCollider(collider: RAPIER.Collider): void {
+    this.world.removeCollider(collider, false);
+  }
+
   step(): void {
-    this.world.step();
+    for (let i = 0; i < K.SUBSTEPS; i++) this.world.step();
     // Rapier's addForce/addTorque accumulate and persist across steps; they are
     // not cleared for you. A per-tick force left in place is re-applied forever,
     // which looks exactly like a runaway controller. Clear them explicitly.
@@ -99,10 +154,28 @@ export class RapierChassis implements ChassisBody {
     this.body = host.world.createRigidBody(desc);
 
     const half = vec3(K.TRACK_WIDTH / 2, K.WHEELBASE_FRONT, 0.4);
+
+    // Inertia of a solid cuboid of these dimensions, then scaled. See
+    // CHASSIS_INERTIA_MULTIPLIER for why the scale is there and what it costs.
+    const w = half.x * 2;
+    const l = half.y * 2;
+    const h = half.z * 2;
+    const k = (mass / 12) * K.CHASSIS_INERTIA_MULTIPLIER;
+    const inertia = {
+      x: k * (l * l + h * h),
+      y: k * (w * w + h * h),
+      z: k * (w * w + l * l),
+    };
+
     const collider = rapier.ColliderDesc.cuboid(half.x, half.y, half.z)
       .setFriction(K.CHASSIS_FRICTION)
       .setRestitution(K.CHASSIS_RESTITUTION)
-      .setMass(mass);
+      .setMassProperties(mass, { x: 0, y: 0, z: 0 }, inertia, {
+        x: 0,
+        y: 0,
+        z: 0,
+        w: 1,
+      });
     host.world.createCollider(collider, this.body);
     host.track(this.body);
   }

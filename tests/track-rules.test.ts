@@ -1,0 +1,194 @@
+/**
+ * The recovered race rules, exercised against the track.
+ *
+ * Each test names the behaviour it is protecting and why that behaviour exists,
+ * so a future change that breaks one gets told what it broke rather than just
+ * that something went red.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { World } from '../src/sim/world.js';
+import { AnalyticBody } from '../src/sim/analytic-body.js';
+import { Track, buildSliceTrack, segmentIndexFor } from '../src/sim/track.js';
+import { resolveImpact, overlaps } from '../src/sim/collision.js';
+import { vec3, type VehicleInput } from '../src/sim/vehicle.js';
+import * as K from '../src/sim/constants.js';
+
+const DRIVE: VehicleInput = {
+  forward: true,
+  backward: false,
+  left: false,
+  right: false,
+  jacks: false,
+};
+const IDLE: VehicleInput = { ...DRIVE, forward: false };
+
+function worldOn(track: Track, at = vec3(0, 0, K.SPAWN_HEIGHT)) {
+  const body = new AnalyticBody(K.CHASSIS_MASS, at);
+  return {
+    body,
+    world: new World({
+      seed: 1,
+      body,
+      probe: track,
+      track,
+      stepPhysics: (dt) => body.integrate(dt),
+    }),
+  };
+}
+
+describe('segment indexing', () => {
+  it('places Y in 300-unit slices, starting at segment 1', () => {
+    expect(segmentIndexFor(0)).toBe(1);
+    expect(segmentIndexFor(299)).toBe(1);
+    expect(segmentIndexFor(300)).toBe(2);
+    expect(segmentIndexFor(10921)).toBe(37); // the finish line's segment
+  });
+
+  it('clamps behind the start line rather than going negative', () => {
+    expect(segmentIndexFor(-50)).toBe(1);
+  });
+
+  it('never exceeds the 37 slots the original pre-sized', () => {
+    const track = new Track({ segments: 100 });
+    expect(track.segments.length).toBe(K.SEGMENT_SLOTS);
+  });
+});
+
+describe('props in adjacent segments are intangible', () => {
+  it('only the active segment contributes collidable props', () => {
+    const track = buildSliceTrack(4);
+    track.changeSegment(2);
+    const inSeg2 = track.collidableProps();
+    expect(inSeg2.length).toBeGreaterThan(0);
+    for (const p of inSeg2) {
+      expect(segmentIndexFor(p.position.y)).toBe(2);
+    }
+
+    track.changeSegment(3);
+    for (const p of track.collidableProps()) {
+      expect(segmentIndexFor(p.position.y)).toBe(3);
+    }
+  });
+
+  it('a wall one segment ahead does not damage the car', () => {
+    const track = new Track({ segments: 3 });
+    // Put a wall exactly where the car sits, but file it under segment 2.
+    track.addProp(2, 'wall', vec3(0, 0, 1), vec3(5, 5, 5));
+    const { world } = worldOn(track);
+    expect(world.race.segment).toBe(1);
+    for (let i = 0; i < 20; i++) world.step(IDLE);
+    // The car overlaps it in space, but it belongs to another segment.
+    expect(world.race.damage).toBe(0);
+  });
+});
+
+describe('collision damage formulas', () => {
+  const ctx = { forwardVel: K.MAX_SPEED, reverseHeld: false, hasBlades: false };
+  const prop = (kind: Parameters<typeof resolveImpact>[0]['kind']) => ({
+    id: 1,
+    kind,
+    position: vec3(),
+    halfExtent: vec3(1, 1, 1),
+    active: true,
+  });
+
+  it('driving on the track costs nothing - it is ignored outright', () => {
+    expect(resolveImpact(prop('track'), ctx).damage).toBe(0);
+  });
+
+  it('holding reverse suppresses generic-impact damage entirely', () => {
+    const normal = resolveImpact(prop('wall'), ctx);
+    const reversing = resolveImpact(prop('wall'), { ...ctx, reverseHeld: true });
+    expect(normal.damage).toBeGreaterThan(0);
+    expect(reversing.damage).toBe(0);
+    // The spin cut still applies either way.
+    expect(reversing.yawCut).toBe(0.2);
+  });
+
+  it('Blades cut enemy-car damage sixfold', () => {
+    const without = resolveImpact(prop('enemyCar'), ctx).damage;
+    const withBlades = resolveImpact(prop('enemyCar'), { ...ctx, hasBlades: true })
+      .damage;
+    expect(without).toBe(30);
+    expect(withBlades).toBe(5);
+  });
+
+  it('Blades fell a tree instead of taking damage from it', () => {
+    const outcome = resolveImpact(prop('faller'), { ...ctx, hasBlades: true });
+    expect(outcome.damage).toBe(0);
+    expect(outcome.consume).toBe(true);
+  });
+
+  it('generic impacts are capped at 10, fallers at 30', () => {
+    expect(resolveImpact(prop('wall'), ctx).damage).toBeLessThanOrEqual(10);
+    expect(resolveImpact(prop('faller'), ctx).damage).toBeLessThanOrEqual(30);
+  });
+});
+
+describe('collision debounce', () => {
+  it('one impact does not re-trigger every tick while overlapping', () => {
+    const track = new Track({ segments: 2 });
+    // Ahead of the car, so it arrives at speed rather than starting inside.
+    track.addProp(1, 'wall', vec3(0, 40, 1), vec3(8, 8, 8));
+    const { world } = worldOn(track);
+
+    for (let i = 0; i < 40; i++) world.step(DRIVE);
+    const hits = world.events.filter((e) => e.kind === 'damage').length;
+    expect(hits).toBeGreaterThan(0);
+    // Entry fires once; staying inside does not re-trigger.
+    expect(hits).toBe(1);
+  });
+});
+
+describe('pickups', () => {
+  it('a wrench repairs and scores, and is consumed', () => {
+    const track = new Track({ segments: 2 });
+    const wrench = track.addProp(1, 'pickup', vec3(0, 0, 1), vec3(6, 6, 6), 'wrench');
+    const { world } = worldOn(track);
+    world.addDamage(80);
+
+    world.step(IDLE);
+    expect(world.race.damage).toBe(30); // 80 - 50
+    expect(world.race.score).toBe(K.REPAIR_SCORE);
+    expect(wrench?.active).toBe(false);
+
+    const before = world.race.score;
+    for (let i = 0; i < 10; i++) world.step(IDLE);
+    expect(world.race.score).toBe(before); // consumed, not repeatable
+  });
+
+  it('oxygen refills, clamped at the maximum', () => {
+    const track = new Track({ segments: 2 });
+    track.addProp(1, 'pickup', vec3(0, 0, 1), vec3(6, 6, 6), 'oxygen');
+    const { world } = worldOn(track);
+    world.race.oxygen = 20;
+    world.step(IDLE);
+    expect(world.race.oxygen).toBe(70);
+  });
+});
+
+describe('reverse suppression, end to end', () => {
+  it('the same wall hurts when driving and not when reversing', () => {
+    // Both runs drive forward into the same wall. The throttle takes priority
+    // over reverse in the controller, so holding both still drives - which is
+    // exactly the state the recovered rule keys on.
+    const makeRun = (holdReverse: boolean) => {
+      const track = new Track({ segments: 2 });
+      track.addProp(1, 'wall', vec3(0, 40, 1), vec3(8, 8, 8));
+      const { world } = worldOn(track);
+      const input: VehicleInput = { ...DRIVE, backward: holdReverse };
+      for (let i = 0; i < 40; i++) world.step(input);
+      return world.race.damage;
+    };
+    expect(makeRun(false)).toBeGreaterThan(0);
+    expect(makeRun(true)).toBe(0);
+  });
+});
+
+describe('overlap test', () => {
+  it('is a plain axis-aligned box test', () => {
+    expect(overlaps(vec3(0, 0, 0), vec3(1, 1, 1), vec3(1.5, 0, 0), vec3(1, 1, 1))).toBe(true);
+    expect(overlaps(vec3(0, 0, 0), vec3(1, 1, 1), vec3(2.5, 0, 0), vec3(1, 1, 1))).toBe(false);
+  });
+});

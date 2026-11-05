@@ -84,10 +84,11 @@ export const NO_INPUT: VehicleInput = {
  * Wheel positions in chassis-local space, ordered to match the original's
  * `pWheelPointList` indices 1..4.
  *
- * SUBSTITUTE: the original builds this list at runtime from the wheel models in
- * the 3D world, so the actual coordinates live in the W3D geometry, which is not
- * decoded. The wheelbase and track width here ARE recovered constants; the local
- * Z of 0 is our assumption and should be revisited if the geometry is ever read.
+ * RECOVERED. The original builds the list in `prepareCar` as
+ * `com + wheelbase * localForward +/- width/2 * localRight` - relative to the
+ * centre of mass, with **no vertical term**. So a local Z of zero is the
+ * original's own geometry, not an assumption of ours, and the wheelbase and
+ * track width are recovered constants.
  */
 export const WHEEL_LOCAL_POINTS: readonly Vec3[] = [
   vec3(-K.TRACK_WIDTH / 2, K.WHEELBASE_FRONT, 0), // front left
@@ -127,6 +128,8 @@ export interface VehicleState {
   isLanding: boolean;
   /** Sideways speed along the chassis right axis, before grip is applied. */
   slideSpeed: number;
+  /** Blades gadget active: fells trees and cuts enemy-collision damage. */
+  hasBlades: boolean;
 }
 
 export function createVehicleState(): VehicleState {
@@ -147,6 +150,7 @@ export function createVehicleState(): VehicleState {
     jacksExtended: false,
     isLanding: false,
     slideSpeed: 0,
+    hasBlades: false,
   };
 }
 
@@ -307,7 +311,18 @@ function updateDrive(
   }
 
   if (state.powerCoeff > 0 && input.backward) {
-    // Reverse is an IMPULSE, not a force, and is not scaled by powerCoeff.
+    if (state.forwardVel > K.BRAKE_ENGAGE_SPEED) {
+      // SUBSTITUTE: brake before reversing. Proportional to current speed, so
+      // it decelerates hard at first, eases as the car slows, and cannot push
+      // past zero into reverse. See BRAKE_GAIN for why this replaces the
+      // original's straight-to-reverse behaviour.
+      const magnitude = state.forwardVel * K.BRAKE_GAIN * body.mass;
+      body.applyImpulse(scale(body.forward, -magnitude));
+      return;
+    }
+
+    // RECOVERED: once nearly stopped, the original's reverse branch - an
+    // IMPULSE, not a force, and not scaled by powerCoeff.
     const error = -K.MAX_SPEED * drag - state.forwardVel;
     const magnitude = error * (K.ACC_GAIN * K.REVERSE_GAIN_FACTOR) * body.mass;
     body.applyImpulse(scale(body.forward, magnitude));

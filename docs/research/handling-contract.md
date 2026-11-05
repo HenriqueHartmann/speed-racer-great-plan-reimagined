@@ -556,10 +556,31 @@ current `y` at that moment.
 
 ---
 
+## 9e. There is no brake — RECOVERED
+
+`pBrakeGain = 0.3` and `pDecGain = 0.04` are assigned in `beginSprite` and
+`prepareCar`, and **neither is ever read** — not in `doMach5`, not in `doEnemy`.
+There is no brake key in the key map either. The author wrote a brake gain and
+never wired it up.
+
+So in the original, the reverse input goes straight to targeting full negative
+speed. From 69 units the error term is `-138`, the impulse is
+`-138 x 0.077 x mass`, and the car crosses from top speed into reverse in about
+**seven ticks — roughly 230 ms**.
+
+That is faithful and it is unpleasant to drive, which is a distinction worth
+keeping separate. The reimplementation therefore brakes first and engages
+reverse only once nearly stopped; the gain is a **designed substitute**, tuned
+to about 1.3 seconds, and `pBrakeGain`'s own 0.3 is recorded as unused rather
+than pressed into service — at 0.3 the stop still takes only 400 ms.
+
+---
+
 ## 10. Declared but never assigned — do not implement
 
 `pTurnGain`, `pXtraTurnGain`, `pMaxTurnSpeed`, `pMinTurnSpeed`, `pBoost` are properties of
-`doMach5` that are **never assigned** in it. They appear to be inherited from the behaviour shared
+`doMach5` that are **never assigned** in it. Distinct from `pBrakeGain` and `pDecGain`, which *are*
+assigned but never **read** — see §9e. They appear to be inherited from the behaviour shared
 with `doEnemy`. Implementing them as active parameters would be inventing mechanics.
 
 Likewise `pDecGain`, `pBrakeGain`, `pGripFactor`, `pScalar` and `pWheelSpinCoeff` are assigned but

@@ -52,6 +52,16 @@ export const ORIGINAL_TEMPO_FPS = 30;
  * changing this rate changes handling.
  */
 export const TICK_HZ = ORIGINAL_TEMPO_FPS;
+
+/**
+ * Wall-clock duration of one tick. Used for real-time timers such as the Jacks
+ * cooldown.
+ *
+ * This is NOT what the physics advances per tick - that is TIMESTEP. The two
+ * differ on purpose: the original advanced 0.025 s of simulated time per frame
+ * while its frames arrived 1/30 s apart, so simulated time ran at 0.75x real
+ * time and every force constant was tuned against that ratio.
+ */
 export const TICK_DT = 1 / TICK_HZ;
 
 /** RECOVERED - Director's `the ticks` is 1/60 s (Director MX Lingo Dictionary). */
@@ -94,6 +104,28 @@ export const HOVER_DISTANCE = 1.2;
 export const HOVER_RAY_LENGTH = 1;
 
 /**
+ * SUBSTITUTE - extra rotational inertia for the chassis.
+ *
+ * The suspension is a stiff explicit spring: each wheel delivers an impulse of
+ * roughly 0.8 units of velocity per tick at a 1.2-unit lever arm. Against the
+ * inertia of a thin collider box that is enough that any small asymmetry grows
+ * into violent pitch and roll, and the rocking couples into a steady yaw - the
+ * car turns on its own while standing still. Measured at 39 degrees of drift
+ * over ten seconds at rest.
+ *
+ * The original ran the same spring constants inside Havok, against a convex
+ * hull of the real collider mesh, integrated in 0.005 s sub-steps. We cannot
+ * reproduce that solver, so this multiplier buys back the stability it had.
+ * At 4x the drift falls to 0.03 degrees while pitch and roll still work, which
+ * matters because the original has airborne self-righting and therefore does
+ * tumble.
+ *
+ * This is a numerical accommodation, not a recovered value. If the real
+ * collider geometry is ever decoded, derive the inertia from it and drop this.
+ */
+export const CHASSIS_INERTIA_MULTIPLIER = 4;
+
+/**
  * SUBSTITUTE - a spawn height inside the ray's reach, so the suspension can
  * engage on the first tick. Spawning at `HOVER_DISTANCE` would put the ground
  * beyond `HOVER_RAY_LENGTH` and the car would simply fall.
@@ -123,8 +155,37 @@ export const ACC_GAIN = 0.07;
 /** RECOVERED - `pDecGain`, likewise overwritten to 0.04. Consumer not located. */
 export const DEC_GAIN = 0.04;
 
-/** RECOVERED - `pBrakeGain`. Consumer not located in the traced handlers. */
-export const BRAKE_GAIN = 0.3;
+/**
+ * RECOVERED - `pBrakeGain`, assigned in `beginSprite`.
+ *
+ * **Nothing ever reads it**, in either `doMach5` or `doEnemy`, and the game has
+ * no brake key. The author wrote a brake gain and never wired it up. Recorded
+ * here for completeness; it does not drive anything.
+ */
+export const ORIGINAL_UNUSED_BRAKE_GAIN = 0.3;
+
+/**
+ * SUBSTITUTE - the gain our brake actually uses.
+ *
+ * In the original, reverse targets full negative speed the moment it is held,
+ * so from 69 units the error term is -138 and the car crosses from top speed
+ * into reverse in about seven ticks - roughly 230 ms. Faithful, and unpleasant
+ * to drive.
+ *
+ * So reverse brakes first here, and only engages once the car has nearly
+ * stopped. The curve borrows the shape of the recovered coast deceleration - a
+ * per-tick fraction of current speed, biting hard and easing off - and cannot
+ * overshoot into reverse, because it is proportional to the speed it removes.
+ *
+ * The coefficient is tuned, not recovered. `pBrakeGain`'s own 0.3 was tried
+ * first and is far too strong: it still stops the car in 12 ticks, about
+ * 400 ms. This value gives roughly 1.3 seconds from top speed, which reads as
+ * a firm arcade brake rather than a wall.
+ */
+export const BRAKE_GAIN = 0.1;
+
+/** SUBSTITUTE - below this forward speed, reverse engages instead of braking. */
+export const BRAKE_ENGAGE_SPEED = 1;
 
 /** RECOVERED - reverse uses `pAccGain * 1.1`, applied as an impulse. */
 export const REVERSE_GAIN_FACTOR = 1.1;

@@ -180,3 +180,66 @@ describe('recovered rules behave as documented', () => {
     expect(K.JACKS_COOLDOWN_SECONDS).toBeCloseTo(80 / 60, 10);
   });
 });
+
+describe('braking', () => {
+  it('slows without overshooting into reverse', () => {
+    const body = new AnalyticBody();
+    const world = new World({
+      seed: SEED,
+      body,
+      probe: new FlatGround(),
+      stepPhysics: (dt) => body.integrate(dt),
+    });
+
+    // Get up to speed.
+    world.run(60, () => ({ ...NO_INPUT_LOCAL, forward: true }));
+    const top = world.vehicle.forwardVel;
+    expect(top).toBeGreaterThan(40);
+
+    // Brake, sampling the body's own velocity rather than the controller's
+    // cached `forwardVel`. That cache is read before the tick's impulse and
+    // before integration, so it lags by one tick - which shows up as a tiny
+    // rise on the first braking tick and would make a monotonic check lie.
+    let previous = body.linearVelocity.y;
+    let minimum = previous;
+    for (let i = 0; i < 90; i++) {
+      world.step({ ...NO_INPUT_LOCAL, backward: true });
+      const v = body.linearVelocity.y;
+      expect(v).toBeLessThanOrEqual(previous + 1e-9);
+      minimum = Math.min(minimum, v);
+      previous = v;
+    }
+    // It does eventually reverse - that part is the original's behaviour.
+    expect(minimum).toBeLessThan(0);
+  });
+
+  it('takes meaningfully longer than the original to stop from top speed', () => {
+    const body = new AnalyticBody();
+    const world = new World({
+      seed: SEED,
+      body,
+      probe: new FlatGround(),
+      stepPhysics: (dt) => body.integrate(dt),
+    });
+    world.run(60, () => ({ ...NO_INPUT_LOCAL, forward: true }));
+
+    let ticks = 0;
+    while (world.vehicle.forwardVel > 1 && ticks < 300) {
+      world.step({ ...NO_INPUT_LOCAL, backward: true });
+      ticks++;
+    }
+    // The original crossed into reverse in about 7 ticks, roughly 230 ms.
+    // This brake targets about 1.3 seconds, so anything under a second means
+    // the gain has drifted back toward the behaviour it exists to replace.
+    expect(ticks).toBeGreaterThan(30);
+    expect(ticks).toBeLessThan(60);
+  });
+});
+
+const NO_INPUT_LOCAL = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false,
+  jacks: false,
+};

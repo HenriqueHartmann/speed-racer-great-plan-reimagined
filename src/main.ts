@@ -12,13 +12,21 @@ import * as THREE from 'three';
 import * as K from './sim/constants.js';
 import { World } from './sim/world.js';
 import { vec3, type VehicleInput } from './sim/vehicle.js';
+import { buildSliceTrack } from './sim/track.js';
 import {
   initRapier,
   RapierWorld,
   RapierChassis,
-  RapierGround,
 } from './physics/rapier-body.js';
-import { ChaseCamera, PlaceholderCar, createScene } from './render/scene.js';
+import {
+  ChaseCamera,
+  PlaceholderCar,
+  createPropViews,
+  createScene,
+} from './render/scene.js';
+
+const SEGMENTS = 6;
+const TRACK_HALF_WIDTH = 18;
 
 const KEY_MAP: Record<string, keyof VehicleInput> = {
   ArrowUp: 'forward',
@@ -32,7 +40,7 @@ const KEY_MAP: Record<string, keyof VehicleInput> = {
   Space: 'jacks',
 };
 
-function createInput(): { current: VehicleInput; dispose: () => void } {
+function createInput(): VehicleInput {
   const current: VehicleInput = {
     forward: false,
     backward: false,
@@ -40,48 +48,54 @@ function createInput(): { current: VehicleInput; dispose: () => void } {
     right: false,
     jacks: false,
   };
-
   const set = (code: string, down: boolean) => {
     const key = KEY_MAP[code];
     if (key) current[key] = down;
   };
-  const onDown = (e: KeyboardEvent) => {
+  addEventListener('keydown', (e) => {
     if (KEY_MAP[e.code]) e.preventDefault();
     set(e.code, true);
-  };
-  const onUp = (e: KeyboardEvent) => set(e.code, false);
-
-  window.addEventListener('keydown', onDown);
-  window.addEventListener('keyup', onUp);
-  return {
-    current,
-    dispose: () => {
-      window.removeEventListener('keydown', onDown);
-      window.removeEventListener('keyup', onUp);
-    },
-  };
+  });
+  addEventListener('keyup', (e) => set(e.code, false));
+  return current;
 }
 
 async function main(): Promise<void> {
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const hud = document.getElementById('hud') as HTMLElement;
 
+  const track = buildSliceTrack(SEGMENTS);
+
   const rapier = await initRapier();
   const host = new RapierWorld(rapier);
-  host.addGroundPlane();
+  // A strip, not a plane: driving off the edge should mean falling.
+  const length = K.SEGMENT_LENGTH * SEGMENTS;
+  host.addGroundStrip(TRACK_HALF_WIDTH, length / 2, length / 2);
 
-  const chassis = new RapierChassis(rapier, host, vec3(0, 0, K.SPAWN_HEIGHT));
-  const ground = new RapierGround(rapier, host, chassis);
+  // Solid props get a static collider so they stop the car. Pickups do not:
+  // they are collected by the simulation's overlap test and must not block.
+  const propColliders = new Map<number, ReturnType<typeof host.addStaticBox>>();
+  for (const seg of track.segments) {
+    for (const prop of seg.props) {
+      if (prop.kind === 'pickup') continue;
+      propColliders.set(prop.id, host.addStaticBox(prop.position, prop.halfExtent));
+    }
+  }
+
+  const chassis = new RapierChassis(rapier, host, vec3(0, 4, K.SPAWN_HEIGHT));
   const world = new World({
     seed: 0x5eed_1234,
     body: chassis,
-    probe: ground,
+    // The track is the ground probe: it knows segments, surfaces and seams.
+    probe: track,
+    track,
     stepPhysics: () => host.step(),
   });
 
-  const scene = createScene();
+  const scene = createScene(SEGMENTS, TRACK_HALF_WIDTH);
   const car = new PlaceholderCar();
   scene.add(car.object);
+  const propViews = createPropViews(scene, track.segments);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -89,7 +103,6 @@ async function main(): Promise<void> {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const chase = new ChaseCamera(innerWidth / innerHeight);
-
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);
     chase.setAspect(innerWidth / innerHeight);
@@ -101,8 +114,7 @@ async function main(): Promise<void> {
   let wheelSpin = 0;
   let accumulator = 0;
   let last = performance.now();
-  /** Never advance more than this many ticks in one frame, so a stall cannot
-   *  cascade into a freeze while the simulation tries to catch up. */
+  /** Never advance more than this in one frame, so a stall cannot cascade. */
   const MAX_CATCHUP_TICKS = 5;
 
   function frame(now: number): void {
@@ -114,15 +126,16 @@ async function main(): Promise<void> {
 
     let stepped = 0;
     while (accumulator >= K.TICK_DT && stepped < MAX_CATCHUP_TICKS) {
-      world.step(input.current);
+      world.step(input);
       accumulator -= K.TICK_DT;
       stepped++;
     }
     if (stepped === MAX_CATCHUP_TICKS) accumulator = 0;
 
     const v = world.vehicle;
-    wheelSpin += (v.forwardVel / K.WHEEL_RADIUS) * K.WHEEL_SPIN_COEFF * elapsed;
+    const r = world.race;
 
+    wheelSpin += (v.forwardVel / K.WHEEL_RADIUS) * K.WHEEL_SPIN_COEFF * elapsed;
     car.update(chassis.position, chassis.forward, chassis.up, {
       forwardVel: v.forwardVel,
       grounded: v.grounded,
@@ -131,14 +144,34 @@ async function main(): Promise<void> {
     });
     chase.follow(chassis.position, chassis.forward, 1 - Math.exp(-8 * elapsed));
 
+    // Consumed props disappear, and stop blocking. The simulation owns the
+    // flag; the renderer and the physics world only follow it.
+    for (const seg of track.segments) {
+      for (const prop of seg.props) {
+        const view = propViews.get(prop.id);
+        if (view) view.visible = prop.active;
+
+        if (!prop.active) {
+          const collider = propColliders.get(prop.id);
+          if (collider) {
+            host.removeCollider(collider);
+            propColliders.delete(prop.id);
+          }
+        }
+      }
+    }
+
     renderer.render(scene, chase.camera);
 
+    const surface = v.surface.inferredName;
+    const outcome = r.outcome === 'running' ? '' : `   — ${r.outcome.toUpperCase()}`;
     hud.textContent =
       `speed ${v.forwardVel.toFixed(1)} / ${K.MAX_SPEED}` +
       `   wheels ${v.grounded.filter(Boolean).length}/4` +
-      `   segment ${world.race.segment}/${K.SEGMENT_SLOTS}` +
-      `   damage ${world.race.damage.toFixed(0)}` +
-      `   tick ${world.tick}`;
+      `   segment ${r.segment}/${SEGMENTS}` +
+      `   surface ${surface} (grip ${v.surface.grip})` +
+      `\ndamage ${r.damage.toFixed(0)}   oxygen ${r.oxygen.toFixed(0)}` +
+      `   score ${r.score}   tick ${world.tick}${outcome}`;
   }
 
   requestAnimationFrame(frame);

@@ -131,7 +131,53 @@ export class ChaseCamera {
   }
 }
 
-export function createScene(): THREE.Scene {
+/** Colours chosen so a prop's kind is readable at a glance while driving. */
+const PROP_COLOURS: Record<string, number> = {
+  wall: 0xb4583c,
+  faller: 0x3f7a35,
+  enemyCar: 0x2a4fa8,
+  pickup: 0xe8c33a,
+  track: 0x6f6f72,
+};
+
+/** Build meshes for every prop on the track, and return a per-id lookup. */
+export function createPropViews(
+  scene: THREE.Scene,
+  segments: readonly {
+    props: readonly {
+      id: number;
+      kind: string;
+      position: { x: number; y: number; z: number };
+      halfExtent: { x: number; y: number; z: number };
+    }[];
+  }[],
+): Map<number, THREE.Object3D> {
+  const views = new Map<number, THREE.Object3D>();
+  for (const seg of segments) {
+    for (const prop of seg.props) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          prop.halfExtent.x * 2,
+          prop.halfExtent.y * 2,
+          prop.halfExtent.z * 2,
+        ),
+        new THREE.MeshStandardMaterial({
+          color: PROP_COLOURS[prop.kind] ?? 0x888888,
+          roughness: 0.7,
+          emissive: prop.kind === 'pickup' ? 0x664c00 : 0x000000,
+        }),
+      );
+      mesh.position.set(prop.position.x, prop.position.y, prop.position.z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      views.set(prop.id, mesh);
+    }
+  }
+  return views;
+}
+
+export function createScene(segmentCount = 8, halfWidth = 18): THREE.Scene {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87b8e8);
   scene.fog = new THREE.Fog(0x87b8e8, 120, 900);
@@ -150,28 +196,28 @@ export function createScene(): THREE.Scene {
   scene.add(sun);
   scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x3a3a2a, 0.9));
 
-  // A long strip, marked every segment, so motion and scale are legible.
+  // The drivable strip. It is as wide as the track's own half-width, so what
+  // you can see is exactly what the suspension will find.
+  const length = K.SEGMENT_LENGTH * segmentCount;
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(80, K.SEGMENT_LENGTH * 8),
+    new THREE.PlaneGeometry(halfWidth * 2, length),
     new THREE.MeshStandardMaterial({ color: 0x6f6f72, roughness: 1 }),
   );
-  ground.position.y = K.SEGMENT_LENGTH * 3;
+  ground.position.y = length / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
+  // A stripe at every segment boundary, so the recovered 300-unit spacing is
+  // visible rather than merely documented.
   const stripeMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e8 });
-  for (let i = 0; i < 8; i++) {
-    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(70, 1.5), stripeMat);
+  for (let i = 0; i <= segmentCount; i++) {
+    const stripe = new THREE.Mesh(
+      new THREE.PlaneGeometry(halfWidth * 2, 2),
+      stripeMat,
+    );
     stripe.position.set(0, i * K.SEGMENT_LENGTH, 0.02);
     scene.add(stripe);
   }
-
-  const grid = new THREE.GridHelper(2000, 200, 0x55585c, 0x55585c);
-  grid.rotation.x = Math.PI / 2;
-  grid.position.z = 0.01;
-  (grid.material as THREE.Material).opacity = 0.25;
-  (grid.material as THREE.Material).transparent = true;
-  scene.add(grid);
 
   return scene;
 }
