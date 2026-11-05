@@ -94,16 +94,16 @@ composition; legacy materials, shaders, textures and UV mapping; coordinate-syst
 |---|---|---|---|
 | 3.1 | All physics constants — gravity, timestep, sub-steps, restitution, friction, tolerance, scale | **RECOVERED** | Values and their source handlers are in `gameplay-spec.md` §3. Remaining sub-question: whether gravity 90.81 reflects a non-metric world scale or deliberate arcade weighting — **UNKNOWN** |
 | 3.2 | The vehicle handling model | **RECOVERED** | Rigid-body chassis with four-point raycast hover suspension and custom drive forces. Tuning constants in `gameplay-spec.md` §3b |
-| 3.3 | Which gameplay objects actually use rigid-body simulation | **PARTIALLY RECOVERED** | The player and enemy chassis are Havok rigid bodies (`pChassisRB`), with friction and restitution both zero. Track, trees and pickups are configured in `BehaviorScript 20 — PREP`. A full per-object inventory has not yet been traced |
+| 3.3 | Which gameplay objects actually use rigid-body simulation | **RECOVERED** | Player and enemy chassis are rigid bodies with zero friction and restitution. Collision is classified script-side by `userData.kind` (`track`, `faller`, `enemyCar`, other) and only the car's **own segment** is collidable at any time. See `handling-contract.md` §9b and §9c |
 | 3.4 | Whether the Mach 5 controller relies on generic rigid-body physics | **RESOLVED — no** | The chassis is a rigid body, but grip and drive are custom: contact friction and restitution are set to zero and the controller applies its own suspension and drive impulses. This vindicates the hybrid architecture in `architecture.md` §3 |
-| 3.5 | Gadget effects, durations, costs, cooldowns | **UNKNOWN — now tractable** | The handlers exist in the recovered source (`pBladesTIMER`, `pDeflectorTIMER`, `pGripTIMER`, `jacks_TIMER`, `pHas*` flags). Not yet traced |
+| 3.5 | Gadget effects, durations, costs, cooldowns | **PARTIALLY RECOVERED** | Jacks fully traced: requires `pPowerCoeff = 1`, impulse `mass × 40`, 80-tick cooldown, retracts when a wheel regrounds. Blades reduce enemy-collision damage sixfold and enable tree felling. Grip forces `pGrip = 1` until `pGripTIMER`. Deflector, Lights, Parascope, Robot and Frogger not traced |
 | 3.6 | Pickup values | **UNKNOWN** | Decompile `Lscr` |
-| 3.7 | Damage and oxygen rules | **UNKNOWN** | Decompile `Lscr` |
+| 3.7 | Damage and oxygen rules | **RECOVERED** | Full rules in `handling-contract.md` §9d, including that death triggers on the *displayed* damage value, not the real one |
 | 3.8 | Rival ("Duggery") behaviour model | **UNKNOWN** | Decompile `Lscr` |
-| 3.9 | Segment count, length and layout | **PARTIALLY RECOVERED** | Segment length is **300 world units**, track advances along **+Y**, and boundary straddling is handled within 2 units of a seam. Segment *count* and layout still require W3D inspection |
+| 3.9 | Segment count, length and layout | **RECOVERED (count and length); layout UNKNOWN** | `PREP` pre-sizes the four segment arrays to **37** slots; segment length is **300 units**; track advances **+Y**. Segments are authored, not generated — `doM5ChangeSegment` only toggles collision. How many slots are populated, and the starting coordinate, need the W3D geometry |
 | 3.10 | Key bindings | **UNKNOWN** | Decompile `Lscr` |
-| 3.11 | Stage size — `512 × 384` read big-endian from `DRCF` | **INFERRED** | Byte-order assumption unconfirmed. Decompile `DRCF`, or measure a capture |
-| 3.12 | Frame rate / tempo | **UNKNOWN** | Decompile `DRCF` |
+| 3.11 | Stage size | **RECOVERED — `512 × 384`** | Parsed from `DRCF` by the decompiler; the earlier big-endian reading was correct |
+| 3.12 | Frame rate / tempo | **RECOVERED — `30`** | From `DRCF`. Note this is a target tempo; the simulation is advanced once per frame with no accumulator, so real-time behaviour tracked actual frame rate |
 
 ---
 
@@ -157,3 +157,6 @@ as unreliable.
 | 6.3 | Havok WASM deterministic-replay guarantees | **UNKNOWN** | No equivalent guarantee claimed absent specific documentation and testing |
 | 6.4 | WebGPU availability under WebKitGTK | **UNKNOWN** | Verify for the concrete environment. Do not assume hardware acceleration merely because a WebGL context exists |
 | 6.5 | Whether a full physics engine is warranted at all | **UNKNOWN** | Decided by the Stage 3 go/no-go, not in advance |
+| 6.6 | Havok Xtra `step(timestep, substeps)` semantics — does it advance `timestep` in total or per substep? | **UNKNOWN** | Changes the simulated-to-real time ratio by 5×. Needs Havok Xtra documentation or a reference capture |
+| 6.7 | Order of `exitFrame` handlers — do drive forces land before or after the physics step? | **UNKNOWN** | Determined by sprite channel order in the score (`VWSC`), which the decompiler does not recover |
+| 6.8 | Director `the ticks` rate for this build | **UNKNOWN** | Needed to express the Jacks cooldown and collision debounce in seconds |

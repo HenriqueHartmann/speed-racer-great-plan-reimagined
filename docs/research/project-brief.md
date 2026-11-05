@@ -70,57 +70,42 @@ collision against static props, the damage / oxygen / score rules, and one gadge
 
 ## Asset and publication policy
 
-Three distinct contexts. Conflating them is the mistake this policy exists to prevent.
+**The repository owner has chosen to track the original artifact and everything derived from it**,
+so the project can be cloned and run across their own machines. This document records that decision
+plainly rather than describing a policy the repository does not follow.
 
-### A. Local research laboratory
+### What is in version control
 
-The original artifacts, and anything extracted from them — decompiled Lingo, converted meshes,
-textures, audio, SWF dumps. Lives on local disk under `original_game/`. **Never committed, never
-pushed.** All analysis happens here.
-
-### B. Private prototype
-
-A local build that may load reference material while handling and geometry are being measured.
-Not distributed. Subject to whatever permissions actually apply.
-
-### C. Publicly distributable game
-
-This repository.
-
-> **No original game binaries, extracted media, converted assets or decompiled source code are
-> tracked or distributed by this repository** — neither in the working tree nor in Git history.
-
-It contains our own documentation, our own code and our own art. Stated precisely, because the
-distinction matters:
-
-| Category | Present here? |
+| Category | Tracked? |
 |---|---|
-| Original binaries and media | **No** |
-| Extracted or converted assets | **No** |
-| Decompiled source code | **No** |
-| Factual technical research notes from read-only analysis | **Yes, by design** |
+| Original binaries and media — Director movies, the projector, FLV | **Yes** |
+| Material derived from them — decompiled Lingo, working copies | **Yes** |
+| Extracted or converted assets, once they exist | **Yes** |
+| Our own documentation, code and art | **Yes** |
 
-The research documentation **does** contain factual observations and identifiers obtained from the
-original artifact — cast member names, Lingo symbols, resource IDs, payload sizes, chunk signatures,
-file hashes. Claiming otherwise would be false. That information is the product of the research; it
-is not the game.
+### What that means
 
-The original artifacts are **physically inside the project root**, not outside the working tree.
-They are excluded from Git by `.gitignore` and verified with `git check-ignore`.
+- The repository is **public**, so this material is published, not merely stored.
+- Git history is permanent: removing a file later does not remove it from history, and forks and
+  caches persist independently.
+- Commit author metadata is publicly visible.
 
-### Honest limitation
+### What has not changed
 
-Excluding original media files does **not** by itself resolve every intellectual-property question.
-Copyright, trademark, trade dress and derivative-work issues are **distinct legal concepts**, and
-whether and how each applies depends on the concrete use and the applicable jurisdiction. This
-document does not attempt to decide that, and none of it is legal advice.
+- Original files are **never moved, renamed or modified in place**. Their SHA-256 baseline is in
+  `artifact-inventory.md` and is re-verified before every commit.
+- Staging is by **explicit path**; `git add .` and `git add -A` are not used.
+- No original executable, installer, projector or plugin is ever run.
+- No binary-only tool is run, and no copy-protection mechanism is interacted with — that restriction
+  is about **safety**, and is independent of any distribution question.
 
-What can be said plainly: a public repository under a real name and personal email is a more exposed
-position than an anonymous archive item, and DMCA takedowns against game-asset repositories do
-occur. This is recorded as an accepted, project-owner risk — not as a solved problem.
+### Rights
 
-Anyone obtaining the original artifacts must have an appropriate legal basis to access them. This
-repository does not link to downloads and does not redistribute the original game.
+*Speed Racer* / *Mach GoGoGo* is the intellectual property of its respective rights holders. No
+permission has been sought or granted. Provenance of the artifact is **unverified** and its release
+date is **unresolved**. Copyright, trademark, trade dress and derivative-work issues are distinct
+legal concepts whose application depends on the concrete use and jurisdiction; nothing here is legal
+advice.
 
 ---
 
@@ -135,12 +120,8 @@ This repository is **public**, personal, and not affiliated with any employer.
 | Verification | `git check-ignore -v` on the artifact directory and representative files inside it |
 | Identity | Set **repository-local only**, never global |
 | Author metadata | Publicly visible in a public repository — an accepted, authorized choice |
-| Original artifacts | Never moved, renamed, modified or deleted |
-
-**Layout note.** The original artifact directory sits *inside* the project root. Physical separation
-is unavailable without relocating it, and relocating an original artifact is forbidden by this
-project's own rules. Therefore `.gitignore` plus explicit-path staging **is** the isolation control,
-and it is verified before every commit rather than assumed.
+| Original artifacts | Never moved, renamed, modified or deleted; SHA-256 re-verified before every commit |
+| Tracked content | The full working set, including the original artifact and derived material |
 
 ---
 

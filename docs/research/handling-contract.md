@@ -3,8 +3,8 @@
 Status tags follow `docs/research/project-brief.md`.
 
 The behaviour the reimplementation must reproduce, with every number traced to its source.
-Recovered from decompiled Lingo in `SR_level_1.dcr`, `BehaviorScript 25 — doMach5`. The decompiled
-source is held locally in the gitignored `original_game/` and is not part of this repository.
+Recovered from decompiled Lingo in `SR_level_1.dcr`, chiefly `BehaviorScript 25 — doMach5`. The
+decompiled source is in `original_game/decompiled/`.
 
 > **Nothing here is OBSERVED.** The original game has still never been executed. These are values
 > and control flow read out of recovered source, not measurements of play.
@@ -48,14 +48,109 @@ All from `prepareCar` / `beginSprite` unless noted.
 
 | Constant | Value | Source |
 |---|---|---|
-| Gravity | `vector(0, 0, -90.81)` | `BehaviorScript 2 — Havok Physics` |
-| Fixed timestep | `0.025` s (**40 Hz**) | same, property default `pTimeStep` |
+| Gravity | `vector(0, 0, -90.81)` | `BehaviorScript 2 — Havok Physics`, `beginSprite` |
+| Configured timestep | `0.025` s | same, property default `pTimeStep` |
 | Sub-steps | `5` | same, property default `pSubSteps` |
 | Collision tolerance | `4` | same, property default `pTolerance` |
 | World scale | `1.0` | same, property default `pScale` |
 | Deactivation | `[5.0, 0.1]` | `BehaviorScript 19 — INIT` |
-| Chassis friction | `0` | `prepareCar` |
-| Chassis restitution | `0` | `prepareCar` |
+| Chassis friction | `0` | `BehaviorScript 25 — doMach5`, `prepareCar` |
+| Chassis restitution | `0` | same |
+| **Movie frame rate** | **`30`** | `DRCF` config chunk, `SR_level_1.dcr` and `SR_MAIN.dcr` |
+| **Stage** | **`512 × 384`** | same |
+
+---
+
+## 2b. The simulation cadence — RECOVERED, and it is not what "0.025 s" suggests
+
+> **Correction.** An earlier revision of this document described the configured timestep as
+> "0.025 s (40 Hz)". That inferred a simulation frequency from a timestep value without checking
+> the invocation schedule. The schedule has now been traced and the inference was wrong.
+
+### The call chain
+
+The entire Havok driver is one behaviour, `BehaviorScript 2 — Havok Physics (Inserted HKE)`,
+attached to the Shockwave 3D sprite:
+
+| Handler | What it does |
+|---|---|
+| `beginSprite` | resolves the Havok cast member, shuts down any existing instance, calls `Initialize(sprite.member, pTolerance, pScale)`, publishes the instance as the global `gHavok`, sets gravity, clears the pause flag |
+| `exitFrame` | **if not paused, calls `step(pTimeStep, pSubSteps)` — once, unconditionally** |
+| `endSprite` | shuts the instance down |
+| `setPause` | sets the pause flag |
+
+### What this establishes
+
+1. **The world is advanced exactly once per Director frame.**
+2. **There is no accumulator and no elapsed-time logic anywhere.** Each frame advances the same
+   fixed amount of *simulated* time regardless of how long the frame actually took.
+3. The movie's configured frame rate is **30**.
+
+So the five quantities the configured timestep could have meant are now distinct:
+
+| Quantity | Value |
+|---|---|
+| Configured timestep | `0.025` s of simulated time per call |
+| Sub-steps per call | `5` |
+| Frequency the world is advanced | **once per Director frame → 30 per second at the configured tempo** |
+| Frequency forces and impulses are applied | **once per Director frame**, same cadence |
+| Director event cadence | `enterFrame` then `exitFrame`, 30 per second nominal |
+
+### The consequence
+
+At the configured tempo, the simulation advances **30 × 0.025 = 0.75 seconds of simulated time per
+real second**. Simulated time runs at **three quarters of real time**, and every per-update constant
+in this contract is denominated in *frames*, not seconds.
+
+**UNKNOWN, and it matters:**
+
+- Director's `frameRate` is a *target tempo*, not a guarantee. On a machine that could not sustain
+  30 fps the whole simulation ran slower in real time — the game was **frame-rate coupled by
+  construction**. Whether the original shipped that way deliberately has not been established.
+- Whether the Havok Xtra's `step(timestep, substeps)` advances `timestep` **in total** or
+  `timestep` **per substep** is not documented in the recovered source. If the latter, each call
+  advances `0.125` s and the ratio becomes 3.75× rather than 0.75×. **This changes every derived
+  number below and must be settled before porting.**
+- The relative order of `exitFrame` handlers is determined by **sprite channel order in the score**.
+  The score (`VWSC`) is not recovered by the decompiler, so whether the drive forces applied in
+  `doMach5.exitFrame` land *before* or *after* the Havok step in the same frame is **UNKNOWN**.
+  A one-frame latency difference changes the feel of the controller.
+
+---
+
+## 2c. Update-frequency dependence — audit
+
+Every constant below is applied **once per Director frame**. None is scaled by elapsed time, and
+no handler anywhere reads a clock to compute a delta. Classification:
+
+| Mechanic | Value | Classification |
+|---|---|---|
+| Suspension spring and damper | `pStrength 3.0`, `pDamping 0.05` | **Simulation-step-dependent** — applied as impulses once per step |
+| Throttle force | `× 60` literal | **Simulation-step-dependent**, and the literal encodes an assumed rate (§4) |
+| Coast deceleration | `0.06` / `0.9` | **Director-frame-dependent** — a per-frame fraction of velocity; at a different frame rate the car coasts differently |
+| `pTurnBuild` increment | `pTurnBuildFactor × 0.03` per update | **Director-frame-dependent** — the ramp reaches its 0.75 cap in a fixed number of *frames*, not seconds |
+| `pTurnBuild` decay | `−0.2` per update, floor `0.2` | **Director-frame-dependent** |
+| Z angular damping | `× 0.84` per update | **Director-frame-dependent** — a geometric decay per frame |
+| Self-righting velocity cut | `× 0.1` per update | **Director-frame-dependent** |
+| Underwater damage | `+0.3` per update | **Director-frame-dependent** |
+| Oxygen drain | `−0.2` per update | **Director-frame-dependent** |
+| Oxygen-starvation damage | `+0.3` per update | **Director-frame-dependent** |
+| Damage/oxygen bar easing | `30%` of the gap per update | **Director-frame-dependent** (cosmetic) |
+| Overlay fades | `5`, `10`, `30` per update | **Director-frame-dependent** (cosmetic) |
+| Jacks cooldown | `80` ticks | **Time-independent** — measured against `the ticks`, a real clock |
+| Collision debounce | `60` ticks | **Time-independent** — same clock |
+| Finish line, wrong-way threshold, fall death | `10921`, `100`, `z ≤ −10` | **Time-independent** — positional |
+| Damage and score awards | fixed amounts | **Time-independent** — event-driven |
+
+**The consequence for the port.** The two tick-based timers are the *only* mechanics with real-time
+semantics. Everything else is per-frame, so at any frame rate other than the original's the car
+steers, coasts, drowns and takes water damage at a different real-world rate. A fixed-timestep
+simulation is therefore not merely good practice here — it is required to reproduce the behaviour
+at all.
+
+**UNKNOWN:** Director's `the ticks` rate for this build. It is conventionally 60 per second, which
+would make the Jacks cooldown ≈1.33 s and the collision debounce ≈1 s, but that has not been
+confirmed against this build and both numbers are stated in ticks above, not seconds.
 
 ---
 
@@ -74,11 +169,34 @@ Per update, for each of four wheel points, in `updateHover`:
    - the whole impulse multiplied by **chassis mass**
 4. Record a per-wheel grounded flag.
 
-### `pPowerCoeff` — the single most important derived value
+### `pPowerCoeff` — authoritative description, RECOVERED
 
-The sum of the four grounded flags, divided by 4. It gates drive authority, braking and the
-self-righting logic. A car with two wheels in the air has half the drive force. `pPowerCoeff = 1`
-(all four grounded) is also the **precondition for the Jacks jump**.
+Every read and write was traced in `doMach5`. One write, nine reads.
+
+**Written** once per update, at the top of `updateCar`: the sum of the four grounded flags; if
+non-zero it is then divided by 4, so the value is `0`, `0.25`, `0.5`, `0.75` or `1`. **When no wheel
+is grounded it stays at the raw sum, which is `0`** — the division is skipped, which is harmless
+only because the sum is zero in that branch.
+
+**Read** for:
+
+| Use | Condition | Effect |
+|---|---|---|
+| Throttle authority | `> 0` required | gates the whole throttle branch |
+| Reverse authority | `> 0` required | gates the reverse branch |
+| Coast deceleration | multiplier | deceleration scales **linearly** with wheels on the ground |
+| Jacks eligibility | `= 1` required | all four wheels must be grounded to jump |
+| Jacks retraction | `> 0` required | the jack model retracts only once a wheel is grounded again |
+| Airborne self-righting | `< 1` required | both the dashpot and the angular-velocity cut |
+| Fall death | `= 0` required | combined with `z ≤ −10` and track face `99` |
+| Wheel/visual branch | `≠ 1` and `= 1` | two cosmetic branches |
+
+**Correction to earlier documentation:** `pPowerCoeff` does **not** scale braking in the sense of
+the reverse input — the reverse impulse is *not* multiplied by it; only the *coast* deceleration is.
+Reverse is gated by it but not scaled. The earlier wording conflated the two.
+
+The same derived value exists in `doEnemy` with the same construction, where it additionally scales
+a lateral anti-slide impulse that has no counterpart in `doMach5`.
 
 ---
 
@@ -100,12 +218,49 @@ forward, likewise grip-limited and ×60 — a strong arrest rather than a propor
 factor `0.06` while `|forwardVel| > 1`, and `0.9` below that — so the car stops crisply at low
 speed instead of creeping.
 
-> **UNKNOWN — the unit question.** Director's Havok distinguishes `applyForce` (continuous) from
-> `applyImpulse` (instantaneous), and the drive path mixes both. The literal `60` suggests a
-> per-second conversion assuming 60 updates per second, while the physics step is configured at
-> `0.025 s` (40 Hz). Whether the original was frame-rate coupled, and how the two rates interacted,
-> has **not** been determined. **Do not port the `60` literally** without resolving this; it is the
-> single largest translation risk in the contract.
+### Every force and impulse call in `doMach5` — RECOVERED
+
+All in `BehaviorScript 25 — doMach5`. Invocation frequency is **once per Director frame** for
+everything in `updateCar` and `updateHover`; `collisionHandler` and `keyDown` are event-driven.
+
+| Handler | Kind | Expression | Gated by |
+|---|---|---|---|
+| `updateHover` | impulse at point | `(spring + damper) × chassisMass`, per wheel | hit distance below `pHoverDist` |
+| `updateCar` — throttle, moving forward | **force** | `(pMaxSpeed × pDrag − forwardVel) × pAccGain × chassisMass × forward × min(1, pGrip) × 60` | `pPowerCoeff > 0` |
+| `updateCar` — throttle, moving backward | **force** | `pAccGain × 2 × pMaxSpeed × chassisMass × forward × min(1, pGrip) × 60` | `pPowerCoeff > 0` |
+| `updateCar` — reverse | impulse | `(−pMaxSpeed × pDrag − forwardVel) × (pAccGain × 1.1) × chassisMass × forward` | `pPowerCoeff > 0` |
+| `updateCar` — coast, `\|v\| > 1` | impulse | `−forwardVel × chassisMass × forward × 0.06 × pPowerCoeff` | no input |
+| `updateCar` — coast, `\|v\| ≤ 1` | impulse | `−forwardVel × chassisMass × forward × 0.9 × pPowerCoeff` | no input |
+| `updateCar` — steering | angular impulse | `chassisMass × tPercentAng × pTurnBuild` about Z | `isPlaying` |
+| `updateCar` — self-righting | angular impulse | `−angularMomentum × 0.5` | `pPowerCoeff < 1` and attitude past 30° |
+| `keyDown` — Jacks | impulse | `chassisMass × 40` on world Z | `pPowerCoeff = 1`, not already active |
+
+**Only the two throttle paths use `applyForce`. Everything else uses impulses.** That distinction is
+load-bearing and must survive the port.
+
+### The literal `60` — best-supported explanation, not proven
+
+A force integrated over a step of `dt` delivers an impulse of `force × dt`.
+
+- With the configured `dt = 0.025`, the `× 60` yields an effective impulse of `base × 1.5`.
+- Had the author assumed `dt = 1/60`, it would yield exactly `base × 1.0`.
+
+**Best-supported reading:** the `60` is a *per-second to per-step* conversion written under the
+assumption of a 60 Hz step, applied to a world actually configured at `0.025 s`. Under that reading
+the throttle delivers **1.5× the impulse the author's arithmetic intended** — and the movie then ran
+at 30 fps, a third rate again.
+
+**This is a hypothesis.** It is not settled, because:
+
+- The Havok Xtra's exact `applyForce` semantics — whether the force persists until the next step, is
+  consumed by one step, or is scaled internally — are not recoverable from this source.
+- Whether `step(timestep, substeps)` advances `timestep` in total or per substep is unknown (§2b).
+- The ordering of force application versus the step within a frame is unknown (§2b).
+
+**Do not port the `60` literally, and do not replace it with `40` or `30`.** The correct action is
+to reproduce the *observable behaviour* — reaching `pMaxSpeed` in a comparable time and distance —
+and record the chosen constant as a **designed substitute**, not a recovered value. Settling it for
+real needs either Havok Xtra documentation or a reference capture of the original running.
 
 ---
 
@@ -191,6 +346,138 @@ This is why the car in the original rarely stays flipped.
 | Wrong-way warning | current `y` falls more than **100** below the maximum `y` reached |
 | Fall death | chassis `z ≤ −10`, no wheels grounded, and track face `99` → game over, jumps to the `CLIFF` frame |
 | Underwater damage | on `effectID 12` with camera below water and no Parascope: `gDamage` increases by `0.3` per update, clamped to 100 |
+
+---
+
+## 9b. Collision response — RECOVERED
+
+`collisionHandler me, collisionDetails` in `doMach5`. Registered via `setCollisionCallback`.
+
+**Event data used:** `collisionDetails[2]` is the other model; `collisionDetails[5]` is the hit
+force. Classification is by `userData.kind` on the hit model, a property set during `PREP`.
+
+**Debounce:** the entire handler is skipped unless `the ticks ≥ pCollisionTimeout + 60`. On a
+handled collision, `pCollisionTimeout` is reset and the model is remembered in `lastHitModel`.
+**UNKNOWN:** Director's tick rate for this build, so 60 ticks cannot be stated in seconds.
+
+| `kind` | Damage | Other effect |
+|---|---|---|
+| `"track"` | none | explicitly ignored and returned early — driving on the road never damages |
+| `"faller"` | `+ min(30, hitForce × 10)` | plays `Snd_Crash1` |
+| `"enemyCar"`, Blades active | `+ min(5, hitForce × 10)` | plays `Snd_Crash1` — Blades reduce the penalty sixfold |
+| `"enemyCar"`, no Blades | `+ min(30, hitForce × 10)` | `Snd_Crash1` plus a random voice line from `Snds_HitReactions`, only if the voice channel is free |
+| anything else | `+ min(10, 30 × \|forwardVel\| / 90)`, **only if reverse is not held** | Z angular velocity multiplied by `0.2`; crash volume scales with the same magnitude |
+
+**Script-side behaviour that bypasses the engine:** the `0.2` yaw-velocity cut on generic impacts is
+applied directly to the rigid body, not left to Havok. Damage is entirely script-side. Holding
+reverse during a generic impact **suppresses damage completely** — a recovered quirk, not an
+inference.
+
+**For the vertical slice:** `"track"` and the generic branch are required. `"faller"` is required
+only if falling props are in the slice. `"enemyCar"` is not.
+
+---
+
+## 9c. Track segments — RECOVERED
+
+Segments are **authored, not generated**. Nothing is created or destroyed at runtime.
+
+### Construction, in `BehaviorScript 20 — PREP`
+
+Four parallel arrays are pre-sized to **exactly 37 empty lists**: `SEG_TRK`, `SEG_OBJ`, `SEG_PIC`,
+`SEG_TRE`. The handler then walks every model in the 3D world once and files it by name:
+
+| Name pattern | Destination |
+|---|---|
+| first 3 chars `SEG` | track and scenery, index taken from **chars 5–6 of the model name** for `SEG_TRK` |
+| first 6 chars `Finish` | the finish object |
+| `FALLER_NN_OBJ`, with `TGR` at chars 11–13 | a faller trigger; `userData.myFaller` links trigger to object, id from chars 8–9 |
+| chars 8+ `Wrench`, `CandyPurple`, `CandyRed`, `Oxegen` | pickups |
+
+For everything except `SEG_TRK`, the segment index is computed from geometry:
+`integer(model.transform.position.y) / 300 + 1`. For `SEG_TRK` it is parsed from the **name**.
+
+> **Note on the segment count.** 37 is the array size, read from source — it is **not** derived from
+> `10921 / 300`. The two agree (the finish at `y = 10921` falls inside segment 37), which is
+> corroboration, not the derivation. How many of the 37 slots are actually populated is **UNKNOWN**
+> without inspecting the track geometry.
+
+### Transition, in `doM5ChangeSegment` (`MovieScript 13 — MOVIE`)
+
+Called from `updateCar` when the car's computed segment index changes. It does **not** stream
+geometry; it **toggles collision**:
+
+- On first entry it disables collision between the car and *every* track, object and tree model from
+  index 2 onward, then enables only the current segment.
+- On each subsequent change it disables the car's collision with the outgoing segment's track,
+  objects and trees, and enables it for the incoming one. Scenery (`SEG_PIC`) collision is toggled
+  the same way.
+
+So at any moment the car can only collide with the contents of its own segment. This is a
+performance strategy, and it has a gameplay consequence worth preserving: **objects in adjacent
+segments are intangible.**
+
+`doEnemyChangeSegment` is the rival's equivalent.
+
+### Starting coordinate
+
+**UNKNOWN.** The source computes segment indices from `y` but the starting `y` is set by the
+authored position of the Mach 5 model in the W3D world, which has not been inspected.
+
+---
+
+## 9d. Race rules — RECOVERED
+
+Sources: `BehaviorScript 21 — PLAY` (per-frame rules), `MovieScript 33 — handlePickups`,
+`MovieScript 34 — doUpdateScore`, `MovieScript 37 — doDisplayDamage`,
+`MovieScript 38 — doDisplayOxygen`, `doMach5`.
+
+### Damage
+
+| Rule | Value |
+|---|---|
+| Range | `0`–`100` |
+| Displayed value | eases toward the real value by **30% of the gap per update**, snapping when within `0.5` |
+| Death | when the **displayed** value reaches `100` — not the real value |
+| On death | `isGameOver = 1`, `isPlaying = 0`, audio fades over 1000 ms, a black overlay fades in at 5% per update |
+| Repair pickup | `−50`, clamped at 0, `+500` score |
+| Oxygen starvation | `+0.3` per update while displayed oxygen is at 0 |
+| Underwater without Parascope | `+0.3` per update, clamped to 100 |
+
+### Oxygen
+
+| Rule | Value |
+|---|---|
+| Initial | `100`, mode `0` (hidden) |
+| Underwater | mode `1`, drains `0.2` per update, clamped at 0 |
+| Surfacing | mode `2` — the panel fades out at 10% per update |
+| Pickup | `+50`, clamped to 100 |
+| Low warning | voice line fires when the displayed value crosses **below 25** |
+| Panel fade-in | 30% per update |
+
+### Score
+
+Six digits, rendered by swapping texture overlays `Digit_0`–`Digit_9`; maximum displayable
+`999999`. Recovered awards: repair pickup `+500`, finishing **first** `+5000`.
+**UNKNOWN:** the remaining award values — other pickup branches were not traced.
+
+### Finish
+
+`doFinish` fires from `updateCar` when `y ≥ 10921` while playing. Sets `hasFinished`, awards the
+first-place bonus if `gPosition = 1`, plays the win or lose voice line, then the same game-over
+fade as death.
+
+### Fall death
+
+Chassis `z ≤ −10` **and** `pPowerCoeff = 0` **and** track face `99` → immediate game over and a jump
+to the `CLIFF` frame. The track-face sentinel `99` is what distinguishes a fall from simply being
+airborne.
+
+### Wrong way
+
+`updateCar` tracks the maximum `y` ever reached. If current `y` falls more than **100** below it and
+no interface message is showing, the warning text and `Snd_WrongWay` fire. The maximum resets to
+current `y` at that moment.
 
 ---
 

@@ -2,9 +2,9 @@
 
 Status tags follow `docs/research/project-brief.md`.
 
-> **These files are never committed.** They live in the project root but are excluded by
-> `.gitignore` and verified with `git check-ignore -v`. This document records *facts about* them;
-> it does not contain them.
+> **These files are tracked in this repository**, by the owner's decision, so the project can be
+> cloned and run across their own machines. They are never moved, renamed or modified in place, and
+> the SHA-256 baseline below is re-verified before every commit so that any drift would be visible.
 
 ---
 

@@ -2,10 +2,17 @@
 
 Status tags follow `docs/research/project-brief.md`.
 
-> **Current position: Stage 2 complete — the handling contract is written.** No dependency installed, no
-> original artifact executed, no gameplay code written. Decompiled output and working copies live
-> in the gitignored `original_game/` and are never committed. Each stage below requires **explicit
-> approval** before it begins.
+> **Current position: Stage 2A complete — translation-critical research closed out.**
+>
+> - Stage 0 complete — documentation and repository.
+> - Stage 1 complete — decompilation, using the **ProjectorRays JavaScript core run headlessly in
+>   Node.js**. The native ProjectorRays CLI remains **untested**; LibreShockwave remains untested.
+> - Stage 2 complete — the handling contract.
+> - Stage 2A complete — simulation cadence, force semantics, collision, segments and race rules.
+>
+> No dependency is installed, no gameplay code is written, and the original game has never been
+> executed. Decompiled output and working copies live in `original_game/` and are tracked. Each
+> stage below requires **explicit approval** before it begins.
 
 ---
 
@@ -114,7 +121,7 @@ The nine files exist and are staged. **The initial commit has not been created.*
    `main.js` touches the page — and `pako` is used solely for `inflate`. So the audited modules
    were driven headlessly in Node 26 with `pako` shimmed onto Node's built-in `zlib`. No browser,
    no CDN, no `npm install`, no network. Strictly safer than the planned browser smoke test.
-3. **Working copies** of the four movies were placed in the gitignored `original_game/source/`;
+3. **Working copies** of the four movies were placed in `original_game/source/`;
    the originals were read once to copy and never written to.
 
 ### Measured results
@@ -173,8 +180,8 @@ documented support matches our file better.
 
 **Do not assume the tools are interchangeable or that their decompiler outputs are equivalent.**
 
-Then: decompile `Lscr`, extract the `3DEM` and `FWS` payloads into the **gitignored**
-`original_game/`, and tag every recovered behaviour per the evidence taxonomy.
+Then: decompile `Lscr`, extract the `3DEM` and `FWS` payloads into `original_game/`, and tag every
+recovered behaviour per the evidence taxonomy.
 
 **Acceptance:** each important parameter carries a status with its evidence; decompiler limitations
 are documented; every handler that could not be reconstructed is listed **by name**.
@@ -290,6 +297,7 @@ not commitments.
    `docs/research/project-brief.md`.
 4. **Only one gameplay level movie is present.** `SR_level_1.dcr` is the sole level in the supplied artifact, which also contains `SR_MAIN.dcr`, `JIGSAW.dcr` and `SLIDERS.dcr`. Plan no content depending on levels we do not have.
 5. **Provenance unverified; build date unresolved.** Both retained as open items.
-6. **No gameplay has been observed.** Every behavioural claim is symbol-level evidence produced by
-   a custom read-only inspection script; no third-party decompiler has been run and no handler body
-   has been read. The documentation must not drift into implying otherwise.
+6. **No gameplay has been observed.** The Lingo source has been recovered and read, so behaviour is
+   now traced from code rather than guessed from symbols — but the original game has still never
+   been executed. Nothing in this repository is OBSERVED, and the documentation must not drift into
+   implying otherwise.

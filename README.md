@@ -62,10 +62,10 @@ Every claim in this repository carries a status. This is the discipline the proj
 
 Two consequences worth stating plainly:
 
-- **Nothing here is OBSERVED.** The original game has never been executed. A custom read-only
-  inspection script (Python standard library, operating in memory) *was* run and produced most of
-  this research; no third-party decompiler has been tested, and `SR_GAME.exe` was only
-  string-scanned, never run.
+- **Nothing here is OBSERVED.** The original game has never been executed, and `SR_GAME.exe` was
+  only string-scanned, never run. The Lingo source *has* been decompiled — using the ProjectorRays
+  JavaScript core run headlessly in Node.js — so behaviour is traced from code rather than guessed
+  from symbols. The native ProjectorRays CLI and LibreShockwave remain untested.
 - **Physics parameters now have values, and each cites its source handler.** They were recovered by
   decompiling the Lingo bytecode locally. What is still unknown stays marked unknown — for example
   which surface each grip and drag pair belongs to, and whether gravity `90.81` reflects a
@@ -73,39 +73,31 @@ Two consequences worth stating plainly:
 
 ---
 
-## What this repository does and does not contain
+## What this repository contains
 
-> **No original game binaries, extracted media, converted assets or decompiled source code are
-> tracked or distributed by this repository.**
+This repository carries the **complete working set**, so that the project can be cloned and run on
+the owner's own machines:
 
-Four categories, kept distinct:
-
-| Category | Present here? |
+| Directory | Contents |
 |---|---|
-| Original binaries and media — Director movies, executables, FLV, audio, bitmaps | **No** |
-| Extracted or converted assets — meshes, textures, dumped SWF, decoded audio | **No** |
-| Decompiled source code — reconstructed Lingo | **No** |
-| Factual technical research notes from read-only analysis | **Yes, by design** |
+| `docs/` | Research documentation — the analysis, with every claim carrying an evidence status |
+| `Speed Racer Demon on Wheels The Great Plan Full/` | The original artifact as supplied: four Director movies, the Windows projector, and 16 FLV videos |
+| `original_game/source/` | Working copies of the four `.dcr` movies |
+| `original_game/decompiled/` | The Lingo source recovered from those movies |
 
-The fourth category is the point of this repository, and it is worth being explicit: the research
-documents **do** contain factual observations derived from the original artifact — identifiers,
-cast member names, resource IDs, payload sizes, chunk signatures and file hashes. That information
-is the product of the research; it is not the game.
+The original files are never moved, renamed or modified in place. Their SHA-256 values are recorded
+in [`artifact-inventory.md`](docs/research/artifact-inventory.md) and re-verified before every
+commit, so any drift would be visible.
 
-The original artifacts sit **physically inside the project root** on the author's machine. They are
-not outside the working tree — they are excluded from Git by [`.gitignore`](.gitignore), verified
-with `git check-ignore` before every commit, and never moved, renamed or modified.
+Staging is still done by explicit path — `git add .` and `git add -A` are not used — so that every
+addition to history is deliberate.
 
-### Obtaining the original artifact
+### Provenance and rights
 
-This repository **does not distribute the original game and does not link to downloads.**
-
-Anyone wishing to reproduce this research must obtain the original artifact themselves and must
-have an appropriate legal basis to access it. The file hashes in
-[`artifact-inventory.md`](docs/research/artifact-inventory.md) exist so that a copy can be compared
-against the one studied here — not as a pointer to a source.
-
----
+*Speed Racer* / *Mach GoGoGo* is the intellectual property of its respective rights holders. The
+artifact here is a 2005–2008 Shockwave title; its provenance is **unverified** and its release date
+is **unresolved** (see the research documents). Nothing in this repository was authored by the
+rights holders for this purpose, and no permission has been sought or granted.
 
 ## Legal note
 

@@ -2,10 +2,10 @@
 
 Status tags follow `docs/research/project-brief.md`.
 
-> **No asset has been extracted.** This catalogue records what was *located* inside the artifact
-> files by a custom read-only inspection script (Python standard library, in memory). Nothing was
-> written to disk, converted, or decoded. No third-party decompiler has been run. Extracted assets,
-> if and when they exist, live in the gitignored `original_game/` and are never committed.
+> **No binary asset has been extracted yet.** This catalogue records what was *located* inside the
+> artifact files by a custom read-only inspection script (Python standard library, in memory). No
+> bitmap, sound, mesh or video has been decoded or written out. The Lingo **source** has been
+> recovered and lives in `original_game/decompiled/`; see `docs/implementation-plan.md` §Stage 1.
 
 ---
 

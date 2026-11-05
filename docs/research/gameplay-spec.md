@@ -313,8 +313,8 @@ Sound channels: `SndC_Music`, `SndC_M5Engine`, `SndC_M5Grnd`, `SndC_M5FX`, `SndC
 
 | Property | Reading | Status |
 |---|---|---|
-| Stage rect | `DRCF` read big-endian: top 320, left 384, bottom 704, right 896 → **512 × 384 (4:3)** | **INFERRED** — byte order unconfirmed |
-| Frame rate / tempo | `TODO(unverified)` | **UNKNOWN** |
+| Stage rect | **512 × 384 (4:3)** | **RECOVERED** — parsed from the `DRCF` config chunk by the decompiler, confirming the earlier big-endian reading |
+| Frame rate / tempo | **30** | **RECOVERED** — `DRCF` config chunk. This is a *target* tempo, not a guarantee |
 | Renderer path **available** | `getRendererServices`, `directX7_0`, `fullScene`, `hardwareAntialiasing`, `sw3dbaddriverlist` | **VERIFIED** (symbols). Evidence of an available hardware Direct3D 7 path — **not** evidence of observed runtime behaviour |
 | Texture formats | `rgba8880`, `rgba4444`, `rgba5551`, `rgba5550` | **VERIFIED** (symbols) |
 
