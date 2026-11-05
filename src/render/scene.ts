@@ -26,6 +26,10 @@ export interface VehicleViewState {
   forwardVel: number;
   grounded: readonly boolean[];
   jacksExtended: boolean;
+  bladesActive: boolean;
+  gripActive: boolean;
+  lightsActive: boolean;
+  shieldActive: boolean;
   wheelSpin: number;
 }
 
@@ -86,15 +90,70 @@ export class PlaceholderCar implements VehicleView {
     this.jacks.position.z = -0.6;
     this.jacks.visible = false;
     this.object.add(this.jacks);
+
+    // Each gadget gets a crude but distinct tell, so that activating one is
+    // visible on the car and not only in the HUD. The real models exist in the
+    // undecoded W3D world as separate nodes - saw, grips, lights, shield.
+    this.blades = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.3, 1.3, 0.08, 20),
+      new THREE.MeshStandardMaterial({ color: 0xb8c4cc, metalness: 0.8, roughness: 0.3 }),
+    );
+    this.blades.rotation.x = Math.PI / 2;
+    this.blades.position.set(0, K.WHEELBASE_FRONT * 0.6, 0);
+    this.blades.visible = false;
+    this.object.add(this.blades);
+
+    this.shield = new THREE.Mesh(
+      new THREE.SphereGeometry(1.9, 20, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0x66ccff,
+        transparent: true,
+        opacity: 0.22,
+        emissive: 0x113355,
+      }),
+    );
+    this.shield.visible = false;
+    this.object.add(this.shield);
+
+    this.headlights = new THREE.Mesh(
+      new THREE.ConeGeometry(1.6, 7, 14, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xfff0b0,
+        transparent: true,
+        opacity: 0.16,
+        side: THREE.DoubleSide,
+      }),
+    );
+    this.headlights.rotation.x = -Math.PI / 2;
+    this.headlights.position.set(0, K.WHEELBASE_FRONT + 3.3, 0.1);
+    this.headlights.visible = false;
+    this.object.add(this.headlights);
   }
+
+  private readonly blades: THREE.Mesh;
+  private readonly shield: THREE.Mesh;
+  private readonly headlights: THREE.Mesh;
 
   update(position: Vec3, forward: Vec3, _up: Vec3, state: VehicleViewState): void {
     this.object.position.set(position.x, position.y, position.z);
     // Yaw only: the placeholder does not need the full orientation to read well.
     this.object.rotation.set(0, 0, Math.atan2(-forward.x, forward.y));
 
-    for (const wheel of this.wheels) wheel.rotation.x = state.wheelSpin;
+    for (const wheel of this.wheels) {
+      wheel.rotation.x = state.wheelSpin;
+      // Grip tyres: the original shows four extra models. A colour change is
+      // enough of a tell for a placeholder.
+      (wheel.material as THREE.MeshStandardMaterial).color.setHex(
+        state.gripActive ? 0x9a6b2a : 0x1a1a1a,
+      );
+    }
+
     this.jacks.visible = state.jacksExtended;
+    this.shield.visible = state.shieldActive;
+    this.headlights.visible = state.lightsActive;
+
+    this.blades.visible = state.bladesActive;
+    if (state.bladesActive) this.blades.rotation.z += 0.6;
   }
 }
 

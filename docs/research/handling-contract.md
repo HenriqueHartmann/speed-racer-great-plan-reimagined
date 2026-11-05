@@ -384,6 +384,52 @@ half top speed rather than decelerating against a force.
 
 ---
 
+## 6b. The gadgets — RECOVERED
+
+All seven, from `doMach5`'s `keyDown` handler and the expiry block in
+`updateCar`. The bindings are letters `a`–`g` **and** digits `1`–`7` — the same
+lettering painted on the steering wheel in `mach_5_color.jpg`.
+
+| Key | Gadget | Lifetime | Effect |
+|---|---|---|---|
+| `a` `1` | Jacks | 80 ticks (1.33 s) | upward impulse `mass × 40`; needs all four wheels down; cannot be cancelled early |
+| `b` `2` | Grip | 500 ticks (8.33 s) | overwrites `pGrip` with `1` every update, so the surface stops mattering |
+| `c` `3` | Blades | 240 ticks (4 s) | fells trees instead of taking damage; cuts enemy-car damage from 30 to 5 |
+| `d` `4` | Deflector | 500 ticks (8.33 s) | raises the shield model |
+| `e` `5` | Lights | until toggled | headlights and ambient light |
+| `f` `6` | Frogger | until toggled | survives submersion; see below |
+| `g` `7` | Robot | one-shot | targets the nearest visible rival |
+
+Every gadget except Jacks toggles off on a second press. Jacks clears only when
+its timer expires **and** a wheel is back on the ground.
+
+### The Deflector appears to be cosmetic — OBSERVED in source
+
+`pHasShield` is set by the Deflector and by the Frogger, and is read in exactly
+one place: the block that positions and rotates the shield model. **It is never
+consulted by `collisionHandler`.** So in this build the Deflector changes how the
+car looks and nothing else. Recorded as found rather than given an invented
+effect.
+
+### Frogger and oxygen — a correction
+
+Earlier revisions of this document said oxygen drains while underwater. **That
+was wrong.** The original drains it while the scope is *deployed*:
+
+```
+if (pSheildRotate = 0) and (pHasScope = 1) then
+  gOxygenMODE = 1
+  gOxygen = max(0, gOxygen - 0.2)
+```
+
+So oxygen is the Frogger's air supply, not a drowning timer:
+
+- submerged **without** the Frogger → `+0.3` damage per update;
+- submerged **with** it → `−0.2` oxygen per update, no damage;
+- deploying it **out of water** refills the tank to 100.
+
+---
+
 ## 7. Jacks (jump) — RECOVERED
 
 - Triggered by `kJacks`, or the literal keys `a` or `1`.

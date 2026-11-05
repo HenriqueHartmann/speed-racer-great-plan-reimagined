@@ -29,7 +29,7 @@ export type Outcome = 'running' | 'finished' | 'destroyed' | 'fell';
 export interface SimEvent {
   tick: number;
   kind:
-    | 'jacks'
+    | 'gadget'
     | 'wrong-way'
     | 'surface-change'
     | 'damage'
@@ -40,6 +40,8 @@ export interface SimEvent {
     | 'fell';
   /** Rounded so the event log is stable to compare. */
   value?: number;
+  /** Which gadget, for `gadget` events. */
+  gadget?: string;
 }
 
 export interface RaceState {
@@ -126,12 +128,18 @@ export class World {
 
     const before = this.vehicle.jacksExtended;
 
-    stepVehicle(this.vehicle, this.body, this.probe, input, K.TICK_DT);
+    stepVehicle(this.vehicle, this.body, this.probe, input, K.TICK_DT, this.tick);
     this.stepPhysics?.(K.TICK_DT);
 
-    if (!before && this.vehicle.jacksExtended) {
-      this.events.push({ tick: this.tick, kind: 'jacks' });
+    for (const id of this.vehicle.justActivated) {
+      this.events.push({ tick: this.tick, kind: 'gadget', gadget: id });
+
+      // RECOVERED: deploying the Frogger out of water tops the tank back up.
+      if (id === 'frogger' && !this.race.underwater) {
+        this.race.oxygen = K.STAT_MAX;
+      }
     }
+    void before;
     if (this.vehicle.effectId !== this.lastEffectId) {
       this.lastEffectId = this.vehicle.effectId;
       this.events.push({
@@ -245,14 +253,25 @@ export class World {
       this.events.push({ tick: this.tick, kind: 'wrong-way' });
     }
 
-    if (r.underwater) {
+    // Oxygen is the Frogger's supply, not a drowning timer.
+    //
+    // RECOVERED, and a correction to earlier documentation: the original drains
+    // oxygen while the **scope is deployed** - `if (pSheildRotate = 0) and
+    // (pHasScope = 1)` - not while the car is underwater. Submerged without the
+    // Frogger you take damage instead; submerged with it, you spend oxygen.
+    const scopeDeployed = this.vehicle.hasScope;
+
+    if (scopeDeployed) {
       r.oxygenActive = true;
       r.oxygen = Math.max(0, r.oxygen - K.OXYGEN_DRAIN);
-      if (!r.hasScope) this.addDamage(K.DROWN_DAMAGE);
+    }
+    if (r.underwater && !scopeDeployed) {
+      this.addDamage(K.DROWN_DAMAGE);
     }
     if (r.oxygenActive) {
       r.oxygenDisplayed = ease(r.oxygenDisplayed, r.oxygen);
-      if (r.oxygenDisplayed <= 0) this.addDamage(K.DROWN_DAMAGE);
+      // Out of air with the scope still out drowns you anyway.
+      if (r.oxygenDisplayed <= 0 && scopeDeployed) this.addDamage(K.DROWN_DAMAGE);
     }
 
     r.damageDisplayed = ease(r.damageDisplayed, r.damage);

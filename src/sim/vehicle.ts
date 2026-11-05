@@ -16,6 +16,14 @@
 
 import * as K from './constants.js';
 import type { Surface } from './constants.js';
+import {
+  createGadgetStates,
+  stepGadgets,
+  toggleGadget,
+  type GadgetId,
+  type GadgetStates,
+  type ToggleResult,
+} from './gadgets.js';
 
 /** Minimal vector, kept plain so snapshots serialise predictably. */
 export interface Vec3 {
@@ -69,7 +77,10 @@ export interface VehicleInput {
   backward: boolean;
   left: boolean;
   right: boolean;
+  /** Legacy alias for the Jacks gadget, kept so existing callers still work. */
   jacks: boolean;
+  /** Gadgets pressed this tick. Edge-triggered: presses, not held state. */
+  gadgetPresses?: readonly GadgetId[];
 }
 
 export const NO_INPUT: VehicleInput = {
@@ -120,6 +131,8 @@ export interface VehicleState {
   surface: Surface;
   /** `effectId` of the last surface seen under the rear wheel. */
   effectId: number;
+  /** Every gadget's active flag and remaining lifetime. */
+  gadgets: GadgetStates;
   /** Simulated seconds remaining before Jacks can fire again. */
   jacksCooldown: number;
   /** Whether the jack models are currently extended. */
@@ -130,6 +143,10 @@ export interface VehicleState {
   slideSpeed: number;
   /** Blades gadget active: fells trees and cuts enemy-collision damage. */
   hasBlades: boolean;
+  /** Frogger active: survives submersion, at the cost of oxygen. */
+  hasScope: boolean;
+  /** Gadget activations this tick, for the caller to react to. */
+  justActivated: GadgetId[];
 }
 
 export function createVehicleState(): VehicleState {
@@ -146,11 +163,14 @@ export function createVehicleState(): VehicleState {
     forwardVel: 0,
     surface: K.SURFACE_DEFAULT,
     effectId: -1,
+    gadgets: createGadgetStates(),
     jacksCooldown: 0,
     jacksExtended: false,
     isLanding: false,
     slideSpeed: 0,
     hasBlades: false,
+    hasScope: false,
+    justActivated: [],
   };
 }
 
@@ -167,9 +187,10 @@ export function stepVehicle(
   probe: GroundProbe,
   input: VehicleInput,
   dt: number,
+  tick: number,
 ): void {
   updateHover(state, body, probe);
-  updateCar(state, body, input, dt);
+  updateCar(state, body, input, dt, tick);
 }
 
 /**
@@ -231,6 +252,7 @@ function updateCar(
   body: ChassisBody,
   input: VehicleInput,
   dt: number,
+  tick: number,
 ): void {
   state.forwardVel = dot(body.linearVelocity, body.forward);
 
@@ -239,11 +261,11 @@ function updateCar(
   const groundedCount = state.grounded.reduce((n, g) => n + (g ? 1 : 0), 0);
   state.powerCoeff = groundedCount === 0 ? 0 : groundedCount / 4;
 
+  updateGadgets(state, body, input, dt, tick);
   updateSteering(state, body, input);
   updateDrive(state, body, input);
   updateSelfRighting(state, body);
   updateLateralGrip(state, body);
-  updateJacks(state, body, input, dt);
 
   // Constant yaw damping, applied every update in the original.
   body.angularVelocity = vec3(
@@ -369,6 +391,12 @@ function updateSelfRighting(state: VehicleState, body: ChassisBody): void {
  * velocity once - the landing "chirp".
  */
 function updateLateralGrip(state: VehicleState, body: ChassisBody): void {
+  // RECOVERED: while the Grip gadget is active the original overwrites pGrip
+  // with 1 every update, so the surface underneath stops mattering.
+  if (state.gadgets.grip.active) {
+    state.surface = K.SURFACE_DEFAULT;
+  }
+
   if (state.powerCoeff === 0) {
     state.isLanding = true;
     return;
@@ -387,28 +415,53 @@ function updateLateralGrip(state: VehicleState, body: ChassisBody): void {
   body.applyImpulse(scale(body.right, -state.slideSpeed * body.mass * factor));
 }
 
-function updateJacks(
+/**
+ * Gadget activation and expiry.
+ *
+ * Presses are edge-triggered: the caller reports keys pressed this tick, not
+ * keys held, which matches the original reacting to `keyDown` rather than to
+ * `keyPressed`.
+ */
+function updateGadgets(
   state: VehicleState,
   body: ChassisBody,
   input: VehicleInput,
   dt: number,
+  tick: number,
 ): void {
+  state.justActivated = [];
+
+  const presses: GadgetId[] = [...(input.gadgetPresses ?? [])];
+  // Legacy alias, so callers that only know about `jacks` keep working.
+  if (input.jacks && !presses.includes('jacks')) presses.push('jacks');
+
+  for (const id of presses) {
+    const result: ToggleResult = toggleGadget(state.gadgets, id, {
+      powerCoeff: state.powerCoeff,
+      tick,
+    });
+    if (result !== 'activated') continue;
+
+    state.justActivated.push(id);
+
+    // Jacks is the only gadget that applies a force. The impulse is RECOVERED:
+    // chassis mass times 40, straight up, and only with all four wheels down.
+    if (id === 'jacks') {
+      body.applyImpulse(vec3(0, 0, body.mass * K.JACKS_IMPULSE_PER_MASS));
+      state.jacksCooldown = K.JACKS_COOLDOWN_SECONDS;
+    }
+  }
+
   if (state.jacksCooldown > 0) {
     state.jacksCooldown = Math.max(0, state.jacksCooldown - dt);
   }
 
-  // Requires ALL FOUR wheels grounded, not merely some.
-  if (input.jacks && !state.jacksExtended && state.powerCoeff === 1) {
-    body.applyImpulse(vec3(0, 0, body.mass * K.JACKS_IMPULSE_PER_MASS));
-    state.jacksExtended = true;
-    state.jacksCooldown = K.JACKS_COOLDOWN_SECONDS;
-    return;
-  }
+  stepGadgets(state.gadgets, { powerCoeff: state.powerCoeff, tick });
 
-  // The jacks retract once the cooldown has elapsed AND a wheel is back down.
-  if (state.jacksExtended && state.jacksCooldown === 0 && state.powerCoeff > 0) {
-    state.jacksExtended = false;
-  }
+  // Mirror the gadget flags the rest of the simulation reads.
+  state.jacksExtended = state.gadgets.jacks.active;
+  state.hasBlades = state.gadgets.blades.active;
+  state.hasScope = state.gadgets.frogger.active;
 }
 
 function localToWorld(body: ChassisBody, local: Vec3): Vec3 {

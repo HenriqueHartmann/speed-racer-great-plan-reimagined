@@ -13,6 +13,7 @@ import * as K from './sim/constants.js';
 import { World } from './sim/world.js';
 import { vec3, type VehicleInput } from './sim/vehicle.js';
 import { buildSliceTrack } from './sim/track.js';
+import { GADGETS, GADGET_BY_KEY, type GadgetId } from './sim/gadgets.js';
 import {
   initRapier,
   RapierWorld,
@@ -28,36 +29,83 @@ import {
 const SEGMENTS = 6;
 const TRACK_HALF_WIDTH = 18;
 
-const KEY_MAP: Record<string, keyof VehicleInput> = {
+/** Driving keys are held; gadget keys are edge-triggered. */
+type DriveKey = 'forward' | 'backward' | 'left' | 'right';
+
+const DRIVE_KEYS: Record<string, DriveKey> = {
   ArrowUp: 'forward',
-  KeyW: 'forward',
   ArrowDown: 'backward',
-  KeyS: 'backward',
   ArrowLeft: 'left',
-  KeyA: 'left',
   ArrowRight: 'right',
-  KeyD: 'right',
-  Space: 'jacks',
+  KeyW: 'forward',
+  KeyS: 'backward',
 };
 
-function createInput(): VehicleInput {
-  const current: VehicleInput = {
+/**
+ * Gadget bindings are the original's own: letters a-g and digits 1-7, the same
+ * lettering painted on the Mach 5's steering wheel. That collides with WASD, so
+ * A and D stay as steering and the gadgets on those letters are reachable by
+ * their digits - noted in the on-screen help rather than silently rebound.
+ */
+const RESERVED_FOR_STEERING = new Set(['KeyA', 'KeyD']);
+
+export interface InputSource {
+  readonly state: VehicleInput;
+  /** Consume the gadget presses accumulated since the last tick. */
+  takePresses(): GadgetId[];
+}
+
+function createInput(): InputSource {
+  const state: VehicleInput = {
     forward: false,
     backward: false,
     left: false,
     right: false,
     jacks: false,
   };
-  const set = (code: string, down: boolean) => {
-    const key = KEY_MAP[code];
-    if (key) current[key] = down;
-  };
+  let pending: GadgetId[] = [];
+
   addEventListener('keydown', (e) => {
-    if (KEY_MAP[e.code]) e.preventDefault();
-    set(e.code, true);
+    if (e.repeat) return;
+
+    const drive = DRIVE_KEYS[e.code];
+    if (drive) {
+      e.preventDefault();
+      state[drive] = true;
+      return;
+    }
+    if (e.code === 'KeyA') { state.left = true; return; }
+    if (e.code === 'KeyD') { state.right = true; return; }
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      pending.push('jacks');
+      return;
+    }
+
+    if (RESERVED_FOR_STEERING.has(e.code)) return;
+    const gadget = GADGET_BY_KEY.get(e.key.toLowerCase());
+    if (gadget) {
+      e.preventDefault();
+      pending.push(gadget);
+    }
   });
-  addEventListener('keyup', (e) => set(e.code, false));
-  return current;
+
+  addEventListener('keyup', (e) => {
+    const drive = DRIVE_KEYS[e.code];
+    if (drive) state[drive] = false;
+    if (e.code === 'KeyA') state.left = false;
+    if (e.code === 'KeyD') state.right = false;
+  });
+
+  return {
+    state,
+    takePresses: () => {
+      const taken = pending;
+      pending = [];
+      return taken;
+    },
+  };
 }
 
 async function main(): Promise<void> {
@@ -124,9 +172,14 @@ async function main(): Promise<void> {
     last = now;
     accumulator += elapsed;
 
+    // Presses are consumed once and delivered to the first tick of this frame,
+    // so holding a key cannot re-fire a gadget and a fast frame cannot drop one.
+    let presses = input.takePresses();
+
     let stepped = 0;
     while (accumulator >= K.TICK_DT && stepped < MAX_CATCHUP_TICKS) {
-      world.step(input);
+      world.step({ ...input.state, gadgetPresses: presses });
+      presses = [];
       accumulator -= K.TICK_DT;
       stepped++;
     }
@@ -140,6 +193,10 @@ async function main(): Promise<void> {
       forwardVel: v.forwardVel,
       grounded: v.grounded,
       jacksExtended: v.jacksExtended,
+      bladesActive: v.gadgets.blades.active,
+      gripActive: v.gadgets.grip.active,
+      lightsActive: v.gadgets.lights.active,
+      shieldActive: v.gadgets.deflector.active || v.gadgets.frogger.active,
       wheelSpin,
     });
     chase.follow(chassis.position, chassis.forward, 1 - Math.exp(-8 * elapsed));
@@ -165,13 +222,22 @@ async function main(): Promise<void> {
 
     const surface = v.surface.inferredName;
     const outcome = r.outcome === 'running' ? '' : `   — ${r.outcome.toUpperCase()}`;
+
+    const gadgetLine = GADGETS.map((g) => {
+      const st = v.gadgets[g.id];
+      if (!st.active) return `${g.label.toLowerCase()} ·`;
+      const left = g.ticks === null ? '' : ` ${st.remaining.toFixed(1)}s`;
+      return `[${g.label.toUpperCase()}${left}]`;
+    }).join('  ');
+
     hud.textContent =
       `speed ${v.forwardVel.toFixed(1)} / ${K.MAX_SPEED}` +
       `   wheels ${v.grounded.filter(Boolean).length}/4` +
       `   segment ${r.segment}/${SEGMENTS}` +
       `   surface ${surface} (grip ${v.surface.grip})` +
       `\ndamage ${r.damage.toFixed(0)}   oxygen ${r.oxygen.toFixed(0)}` +
-      `   score ${r.score}   tick ${world.tick}${outcome}`;
+      `   score ${r.score}   tick ${world.tick}${outcome}` +
+      `\n${gadgetLine}`;
   }
 
   requestAnimationFrame(frame);

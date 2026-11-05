@@ -16,7 +16,7 @@
         white-space: pre; pointer-events: none;
       }
       #help {
-        position: fixed; left: 16px; bottom: 16px; padding: 10px 14px;
+        position: fixed; left: 16px; bottom: 16px; padding: 10px 14px; max-width: 46rem;
         background: rgba(10,12,16,.72); border: 1px solid rgba(255,255,255,.14);
         border-radius: 8px; color: #9aa4b2; font-size: 12px; line-height: 1.6;
         pointer-events: none;
@@ -31,7 +31,14 @@
   <body>
     <canvas id="game"></canvas>
     <div id="hud">loading…</div>
-    <div id="help">W/A/S/D or arrows — drive · Space — Jacks<br />Placeholder car: the original mesh encoding is not decoded.</div>
+    <div id="help">
+      <b>Drive</b> &nbsp;W/S or &uarr;/&darr; &nbsp;·&nbsp; A/D or &larr;/&rarr;<br />
+      <b>Gadgets</b> &nbsp;<b>1</b> Jacks &nbsp; <b>2</b> Grip &nbsp; <b>3</b> Blades &nbsp;
+      <b>4</b> Deflector &nbsp; <b>5</b> Lights &nbsp; <b>6</b> Frogger &nbsp; <b>7</b> Robot<br />
+      The original bound these to <b>a</b>&ndash;<b>g</b> too &mdash; the letters on the Mach 5's
+      steering wheel. A and D are steering here, so use the digits for Jacks and Deflector.<br />
+      Space also fires Jacks. Placeholder car: the original mesh encoding is not decoded.
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
