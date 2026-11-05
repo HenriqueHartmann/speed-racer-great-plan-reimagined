@@ -1,0 +1,25 @@
+{
+  "name": "speed-racer-great-plan-reimagined",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A modern browser reimagining of the Shockwave Director game Speed Racer: The Great Plan",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.14.0",
+    "three": "^0.172.0"
+  }
+}

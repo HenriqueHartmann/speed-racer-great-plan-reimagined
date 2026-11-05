@@ -3,7 +3,7 @@
 A personal research project: reverse-engineering the structure of the historical browser game
 *Speed Racer: The Great Plan*, and building a modern browser-based reimagining of it.
 
-**Status: research phase, Stage 1 complete.** There is no game here yet — no gameplay code, no
+**Status: Stage 3 — there is a drivable prototype.** There is no game here yet — no gameplay code, no
 dependencies, no build. What exists is documentation of what the original artifact actually
 contains, written to a strict evidence standard. The original's Lingo source has been decompiled
 locally, so the physics constants and vehicle model are now recovered facts rather than open
@@ -30,6 +30,21 @@ headers say otherwise:
 | **Track segments are 300 units long** | Advancing along +Y, with seam straddling handled per wheel |
 
 Full details: [`docs/research/`](docs/research/).
+
+---
+
+## Running it
+
+```bash
+npm install
+npm run dev     # http://localhost:5173
+npm test        # determinism and replay suite
+npm run build   # production bundle
+```
+
+W/A/S/D or the arrow keys drive; Space fires the Jacks. **The car is a placeholder** at the
+recovered dimensions — the original mesh encoding is not decoded, so its shape is wrong while its
+proportions are right.
 
 ---
 
@@ -89,6 +104,8 @@ the owner's own machines:
 | `original_game/decompiled/` | The Lingo source recovered from those movies |
 | `original_game/extracted/` | 3D worlds and Flash members pulled out of the movies, plus 50 extracted textures |
 | `tools/` | Our own extraction and inspection tools — standard library only |
+| `src/` | The reimagining: a deterministic simulation core, a Rapier physics backend and a Three.js renderer |
+| `tests/` | Determinism and replay tests |
 
 The original files are never moved, renamed or modified in place. Their SHA-256 values are recorded
 in [`artifact-inventory.md`](docs/research/artifact-inventory.md) and re-verified before every

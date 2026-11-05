@@ -321,6 +321,37 @@ Steering is a **yaw impulse**, not a wheel-angle simulation. The visual wheel de
 
 ---
 
+## 5b. Lateral grip — RECOVERED, and previously missed
+
+> **Correction.** Earlier revisions of this document described `pGrip` as limiting
+> drive force, and recorded that the lateral anti-slide impulse in `doEnemy` "has
+> no counterpart in `doMach5`". **That was wrong.** `doMach5` has one, and it is
+> the car's primary cornering mechanic.
+
+Each update, with at least one wheel grounded, the controller measures sideways
+speed along the chassis right axis and cancels it with an impulse:
+
+- below a forward speed of **5**, the cancellation is **total**, regardless of
+  surface;
+- at or above it, the cancellation is scaled by **`pGrip`**.
+
+This is what `pGrip` is mostly for. A grip of `0.016` on shallow water removes
+only 1.6% of sideways velocity per update, which is why that surface reads as
+ice. On road, grip `1` removes all of it, so the car corners as though on rails.
+
+It also explains the handling character: with chassis contact friction set to
+zero, **every bit of lateral resistance in the game comes from this one impulse.**
+Omitting it produces a car that cannot corner at all — it was caught during
+Stage 3 precisely because the prototype slid indefinitely.
+
+### Landing — RECOVERED
+
+The same branch tracks whether the car is airborne. On the first update after
+touchdown it zeroes angular velocity outright and plays `Snd_FX_Chirp`. So a
+landing kills any spin picked up in the air rather than letting it carry.
+
+---
+
 ## 6. Surfaces — PARTIALLY RECOVERED
 
 `effectID` is assigned from `pTrackFace`, which is the **face index returned by the suspension
@@ -342,7 +373,12 @@ raycast** on the rear wheel. It selects grip and drag.
 > above are inferred from the particle textures and sounds each branch triggers — they are **not**
 > recovered names. Confirming them requires inspecting the track geometry.
 
-Grip enters the drive force as `min(1, pGrip)`, so grip `0.016` cuts drive authority to ~1.6%.
+Grip does **two** things, and the second matters more:
+
+1. It enters the drive force as `min(1, pGrip)`, cutting drive authority.
+2. It scales the lateral anti-slide impulse (§5b), which is the only lateral
+   resistance in the game.
+
 Drag scales the **target speed**, not a resistive force: on a drag-`0.5` surface the car settles at
 half top speed rather than decelerating against a force.
 

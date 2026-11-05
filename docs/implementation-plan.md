@@ -2,7 +2,7 @@
 
 Status tags follow `docs/research/project-brief.md`.
 
-> **Current position: Stage 2A complete — translation-critical research closed out.**
+> **Current position: Stage 3 complete — the technical spike runs, and is tested.**
 >
 > - Stage 0 complete — documentation and repository.
 > - Stage 1 complete — decompilation, using the **ProjectorRays JavaScript core run headlessly in
@@ -10,9 +10,12 @@ Status tags follow `docs/research/project-brief.md`.
 > - Stage 2 complete — the handling contract.
 > - Stage 2A complete — simulation cadence, force semantics, collision, segments and race rules.
 >
-> No dependency is installed, no gameplay code is written, and the original game has never been
-> executed. Decompiled output and working copies live in `original_game/` and are tracked. Each
-> stage below requires **explicit approval** before it begins.
+> - Stage 3 complete — Vite + TypeScript + Three.js + Rapier, a drivable prototype, a
+>   deterministic simulation core and the replay test suite.
+>
+> The original game has still never been executed. Decompiled output and working copies live in
+> `original_game/` and are tracked. Each stage below requires **explicit approval** before it
+> begins.
 
 ---
 
@@ -209,9 +212,60 @@ ported literally until that is resolved.
 
 ---
 
-## Stage 3 — Technical spike
+## Stage 3 — Technical spike — **COMPLETE**
 
-**The first dependencies are installed here. Throwaway code.**
+Dependencies installed: TypeScript, Vite, Three.js, Rapier (`@dimforge/rapier3d-compat`), Vitest.
+`npm audit` reports **0 vulnerabilities**.
+
+### What was built
+
+| Module | Role |
+|---|---|
+| `src/sim/constants.ts` | Every recovered constant, each tagged `RECOVERED` or `SUBSTITUTE` with its source handler |
+| `src/sim/vehicle.ts` | The Mach 5 controller — engine-agnostic, no DOM, no clock |
+| `src/sim/world.ts` | Fixed-timestep loop, race rules, snapshots and an ordered event log |
+| `src/sim/rng.ts` | Seeded PRNG; the simulation never calls `Math.random()` |
+| `src/sim/analytic-body.ts` | A reference body with no engine, so failures are attributable |
+| `src/physics/rapier-body.ts` | Rapier-backed chassis and raycast ground probe |
+| `src/render/scene.ts` | Three.js scene, chase camera, placeholder car behind `VehicleView` |
+| `src/main.ts` | Accumulator loop: whole ticks for the sim, free frame rate for the renderer |
+
+### Go/no-go: does Rapier earn its place?
+
+**Yes, for now.** It passes determinism goals 1 and 2 under test — two identical runs agree exactly,
+and five different render cadences (every tick, every 2nd, 7th, 31st, and never) produce byte-identical
+snapshots and event logs. Goal 3, cross-platform determinism, is **not tested and not claimed**; the
+test for it exists as a deliberately skipped marker rather than a silent gap.
+
+The `ChassisBody` / `GroundProbe` interfaces mean swapping or dropping the engine would not touch
+handling, so this is a reversible decision.
+
+### Two real bugs the tests caught
+
+1. **Rapier's `addForce` persists across steps.** It is not cleared for you, so the per-tick throttle
+   force re-applied itself forever and the car accelerated to 400+ units and flew off. Fixed by
+   resetting force and torque accumulators after each step.
+2. **The Jacks impulse out-ran the suspension ray.** `mass * 40` is a 40 unit/s velocity change; at a
+   1/30 s tick the car moves further per step than the ray is long, so it tunnelled through the
+   ground. Fixed with CCD and a thicker ground collider.
+
+### One research finding the prototype forced out
+
+The prototype slid indefinitely and could not corner. That led back to the decompiled source and the
+discovery of the **lateral anti-slide impulse** in `doMach5` — the car's only source of cornering
+grip, which earlier research had wrongly recorded as existing solely in `doEnemy`. See
+`handling-contract.md` §5b. Building the thing found what reading it had missed.
+
+### Still outstanding
+
+- Playwright smoke test not yet written.
+- Performance not yet measured against a declared workload; no FPS claim is made.
+- The car is a placeholder at the recovered dimensions. The real mesh is blocked on
+  `docs/research/w3d-format.md`.
+
+---
+
+## Stage 3 — original plan, retained for reference
 
 Vite + TypeScript + Three.js + Rapier: a box on a plane, keyboard-driven, fixed timestep.
 
