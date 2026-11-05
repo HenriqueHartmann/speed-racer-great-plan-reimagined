@@ -102,19 +102,55 @@ At the configured tempo, the simulation advances **30 × 0.025 = 0.75 seconds of
 real second**. Simulated time runs at **three quarters of real time**, and every per-update constant
 in this contract is denominated in *frames*, not seconds.
 
-**UNKNOWN, and it matters:**
+### `step()` semantics — RESOLVED from primary documentation
 
-- Director's `frameRate` is a *target tempo*, not a guarantee. On a machine that could not sustain
-  30 fps the whole simulation ran slower in real time — the game was **frame-rate coupled by
-  construction**. Whether the original shipped that way deliberately has not been established.
-- Whether the Havok Xtra's `step(timestep, substeps)` advances `timestep` **in total** or
-  `timestep` **per substep** is not documented in the recovered source. If the latter, each call
-  advances `0.125` s and the ratio becomes 3.75× rather than 0.75×. **This changes every derived
-  number below and must be settled before porting.**
+The *Havok Xtra Lingo Reference Guide* (Havok.com, 2000/2001) documents
+`hkWorld.step(TimeIncrement, NumOfSubsteps)`:
+
+> "This function **steps the physical simulation by the time increment** and uses the specified
+> number of sub-steps to supersample and **split that interval into smaller units**."
+
+So `TimeIncrement` is the **total** simulated time per call, subdivided by the substeps — not per
+substep. The earlier 5× ambiguity is closed: each call advances **0.025 s**, in five internal
+sub-steps of 0.005 s.
+
+The same guide states the intended idiom:
+
+> "To achieve approximate real-time performance you should step the simulation according to the
+> frame rate of the movie. For example, for a Director tempo of 60 fps you should step the world
+> 0.0167 seconds each frame = 1.0 / 60."
+
+**By that formula, `0.025` corresponds to a 40 fps tempo — but this movie's tempo is 30.** The game
+therefore does not step in real time by its own engine's documented convention. Whether that was
+deliberate, a leftover from an earlier tempo, or simply tuned by feel is **UNKNOWN**.
+
+The guide also confirms the frame-rate caveat directly:
+
+> "The frame rate specified in Director is not necessarily the actual frame rate at which the movie
+> plays. It depends on how long it takes Director to render…"
+
+So the original was **frame-rate coupled by construction**, and `30 fps` is a target, never a
+guarantee.
+
+### Force versus impulse — RESOLVED from the same guide
+
+> `applyForce(force)` — "applies a force to a rigid body at its center of mass… An example
+> application of applying a force would be applying the brakes in a car, **which takes time to have
+> an effect**."
+>
+> `applyImpulse(impulse)` — "An impulse, **unlike a force, has an immediate effect on the velocity**
+> of the rigid body."
+
+A force is integrated across the step; an impulse changes velocity at once. The arithmetic in §4
+holds.
+
+**UNKNOWN, and still open:**
+
 - The relative order of `exitFrame` handlers is determined by **sprite channel order in the score**.
-  The score (`VWSC`) is not recovered by the decompiler, so whether the drive forces applied in
-  `doMach5.exitFrame` land *before* or *after* the Havok step in the same frame is **UNKNOWN**.
-  A one-frame latency difference changes the feel of the controller.
+  The score chunk (`VWSC`) *is* present — 5872 bytes in `SR_level_1.dcr`, recovered from the
+  movie's initial load segment — but has not yet been parsed. Whether the drive forces applied in
+  `doMach5.exitFrame` land *before* or *after* the Havok step in the same frame remains unresolved,
+  and a one-frame latency difference changes the feel of the controller.
 
 ---
 
@@ -148,9 +184,12 @@ steers, coasts, drowns and takes water damage at a different real-world rate. A 
 simulation is therefore not merely good practice here — it is required to reproduce the behaviour
 at all.
 
-**UNKNOWN:** Director's `the ticks` rate for this build. It is conventionally 60 per second, which
-would make the Jacks cooldown ≈1.33 s and the collision debounce ≈1 s, but that has not been
-confirmed against this build and both numbers are stated in ticks above, not seconds.
+**RESOLVED.** The *Macromedia Director MX Lingo Dictionary* defines a tick as **a 60th of a
+second**. So the Jacks cooldown of 80 ticks is **≈1.333 s** and the collision debounce of 60 ticks
+is **1 s** — both in real time, independent of frame rate and of the physics step.
+
+This is the one place where the original has genuine wall-clock semantics, and it is worth
+preserving exactly: at a different frame rate everything else drifts, but these two do not.
 
 ---
 
@@ -317,8 +356,8 @@ half top speed rather than decelerating against a force.
 - Sets a cooldown of **80 ticks** from the moment of use.
 - Shows the `pCarJacks` model, plays `Snd_M5Jump`, and raises the HUD text and picture.
 
-**UNKNOWN:** Director's `the ticks` is 60 per second on the platforms this targeted, making the
-cooldown ≈1.33 s — but that rate has not been confirmed against this build.
+**RESOLVED:** a tick is 1/60 s (*Director MX Lingo Dictionary*), so the cooldown is **≈1.333 s** of
+real time.
 
 ---
 
@@ -356,9 +395,9 @@ This is why the car in the original rarely stays flipped.
 **Event data used:** `collisionDetails[2]` is the other model; `collisionDetails[5]` is the hit
 force. Classification is by `userData.kind` on the hit model, a property set during `PREP`.
 
-**Debounce:** the entire handler is skipped unless `the ticks ≥ pCollisionTimeout + 60`. On a
-handled collision, `pCollisionTimeout` is reset and the model is remembered in `lastHitModel`.
-**UNKNOWN:** Director's tick rate for this build, so 60 ticks cannot be stated in seconds.
+**Debounce:** the entire handler is skipped unless `the ticks ≥ pCollisionTimeout + 60` — **one
+second** of real time, since a tick is 1/60 s. On a handled collision, `pCollisionTimeout` is reset
+and the model is remembered in `lastHitModel`.
 
 | `kind` | Damage | Other effect |
 |---|---|---|

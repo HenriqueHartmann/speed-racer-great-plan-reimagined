@@ -125,18 +125,75 @@ After that, three measurements rule out the easy interpretations:
 |---|---|
 | Fixed bytes per vertex? | **No.** The ratio ranges from 2.57 to 396 across 24 meshes in one world |
 | Positions stored as `float32`? | **No.** A scan of all 132 payload bytes of `car_shadow` — a 4-vertex quad — found **zero** plausible float triples |
-| Entropy | **6.5–7.5 bits/byte**, with 13–46% zero bytes. Random and zlib-compressed data measure ~7.95, so this is **not** entropy-coded |
+| Entropy-coded? | **Probably not — but the earlier argument was overstated.** Zero-order byte entropy (6.5–7.5 vs ~7.95 for random) does *not* by itself rule out range coding. A conditional-entropy test was tried and **discarded**: random data scored the same as the mesh data, so it does not discriminate at these sample sizes. The measurement that *does* discriminate is **bit-level** entropy: `car_shadow` 0.721 and `collider` 0.979 against **1.0000** for both random and zlib data. A range coder's output is bit-uniform, so a measurable bit bias argues against one |
 | One payload per model? | **No.** `mach5_body` declares 50 vertices and 64 faces yet has **four** `0x49` blocks totalling 45,829 bytes |
 
-Taken together: the payload is a **variable-length bitstream of quantised values**, and the multiple
-blocks per model indicate **progressive mesh refinement** — the compressed progressive meshes that
-the Intel IFX lineage is known for. The descriptor's vertex and face counts therefore describe a
-base mesh, not the final geometry.
+### Mesh blocks are organised into groups — VERIFIED
 
-**What this costs.** Decoding requires reconstructing the exact quantisation, the bit layout and the
-refinement operations. That is the upper end of the estimate recorded in `open-questions.md`
-(months, not weeks), and it is qualitatively harder than everything decoded so far: the container,
-the scene graph and the textures were all self-describing, and this is not.
+The 4-byte `0x01` blocks are **group separators**. Grouping the mesh blocks by them is decisive:
+
+| World | Group 2 | Later groups |
+|---|---|---|
+| Mach 5 (`7589`) | **20 meshes — one per model** | 2, then 1, then 1: only `mach5_body` and `ROBOT` |
+| Enemy cars (`7591`) | **9 meshes — one per model** | 2, then 2: only `car_body` and `car_bodyDuggery` |
+| Track (`7587`) | **760 meshes — one per model** | 28, then 5, then 3: only complex models |
+
+Group 2 is uniform: **every block starts with byte `04` and has `hdr[2] = hdr[4] = 0`**. Later
+groups have varied first bytes and non-zero `hdr[2]`/`hdr[4]`.
+
+**This narrows the decoding target sharply.** Group 2 alone contains one mesh for every model in
+every world. Whatever the later groups are — refinement levels, morph targets, animation — they are
+not needed for static geometry. Decoding the single `04` encoding would yield all 789 meshes across
+the three worlds.
+
+Taken together: the payload is a **variable-length bitstream of quantised values**. The extra blocks
+for complex models are consistent with progressive refinement, but that reading is **INFERRED** and
+not required for the static-geometry goal.
+
+**The descriptor counts do not describe final geometry for complex models.** `mach5_body` declares
+50 vertices and 64 faces while its four mesh blocks carry header values 255, 255, 511 and 92 — so
+the descriptor is either per-submesh (it declares 9) or describes a base mesh. For simple models the
+counts are trustworthy: `car_shadow` 4/2 is a quad, `scope_door` 12/4.
+
+### Group-2 header — VERIFIED
+
+Every group-2 payload opens with the same ten bytes:
+
+```
+04            format tag, identical in all 789 group-2 meshes
+XX            small value 0x00-0x07
+YY YY         uint16, varies per instance even between identical shapes
+00 00         always zero
+ZZ ZZ ZZ ZZ   uint32
+```
+
+Bytes 1 and 6-9 are **shared by geometrically paired models**: `mach5_wheel_FR` and `_RR` both
+carry `07` and `4a 2a 01 00`; `_RL` and `_FL` both carry `00` and `12 fd 06 00`; the grip pairs
+match likewise. Bytes 2-3 differ even between those pairs. So bytes 1 and 6-9 depend on the shape
+and bytes 2-3 on the instance.
+
+### Encodings tested and ruled out
+
+A focused decoding attempt was made against `car_shadow` — the simplest possible case, a
+four-vertex, two-face quad whose descriptor counts are trustworthy. It **failed**. What it did
+establish is a list of what the payload is *not*, so this ground need not be covered twice:
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| Raw `float32` positions | scan all 132 payload bytes for plausible coordinate triples | **ruled out** — zero candidates |
+| Fixed stride per vertex | bytes/vertex across 24 meshes | **ruled out** — ranges 2.57 to 396 |
+| Deflate / zlib / gzip at any offset | decompress from offsets 0–40, three window modes | **ruled out** — no hit |
+| Bit-packed quantised coordinates | every bit width 6–24, every bit offset 0–400, MSB and LSB first | **ruled out** — zero candidates |
+| LEB128 varint stream | decode, compare value count against `3V + 3F` | **ruled out** — ratios scatter 0.04 to 6.06 with no relationship to counts |
+| Clean range/arithmetic coding | bit entropy of whole, tail-half, tail-quarter | **not clean** — tail reaches 0.998 but byte `0` occurs **14× more often than uniform**, so structure survives |
+
+**Where that leaves it.** The payload is structured but does not match any standard shape, and there
+is no ground truth to check a guess against beyond vertex and face counts.
+
+**This is the documented stopping point.** A go/no-go criterion was set *before* the attempt —
+recover `car_shadow`'s four vertices with matching counts and topology. It was not met, so geometry
+decoding is **suspended by design rather than abandoned mid-stream**. The fallback is to rebuild the
+models that are needed, using the node names, hierarchy, transforms and textures already recovered.
 
 **What is not blocked by it.** Node names, hierarchy, transforms, materials, shaders, lights,
 cameras and all 50 textures are already recovered.
