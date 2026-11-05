@@ -37,7 +37,8 @@ Full details: [`docs/research/`](docs/research/).
 |---|---|
 | [`docs/research/project-brief.md`](docs/research/project-brief.md) | Objective, scope, **the evidence taxonomy**, asset policy |
 | [`docs/research/artifact-inventory.md`](docs/research/artifact-inventory.md) | The 21 original files, SHA-256 baseline, resource census, provenance limits |
-| [`docs/research/gameplay-spec.md`](docs/research/gameplay-spec.md) | Gameplay model recovered from symbols |
+| [`docs/research/gameplay-spec.md`](docs/research/gameplay-spec.md) | Gameplay model recovered from symbols and source |
+| [`docs/research/handling-contract.md`](docs/research/handling-contract.md) | **The vehicle behaviour to reproduce**, every number traced to its handler |
 | [`docs/research/asset-catalog.md`](docs/research/asset-catalog.md) | Assets located — and what has **not** been extracted |
 | [`docs/research/open-questions.md`](docs/research/open-questions.md) | Everything unresolved, with the next safe step for each |
 | [`docs/architecture.md`](docs/architecture.md) | Proposed technical architecture |

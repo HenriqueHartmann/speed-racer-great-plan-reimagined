@@ -157,7 +157,8 @@ and it is verified before every commit rather than assumed.
 ## Related documents
 
 - `docs/research/artifact-inventory.md` — the supplied files, hashes, provenance limits
-- `docs/research/gameplay-spec.md` — gameplay model recovered from symbols
+- `docs/research/gameplay-spec.md` — gameplay model recovered from symbols and source
+- `docs/research/handling-contract.md` — the vehicle behaviour to reproduce, with sources
 - `docs/research/asset-catalog.md` — assets located, and what has not been extracted
 - `docs/research/open-questions.md` — what is unresolved and the next safe step for each
 - `docs/architecture.md` — proposed technical architecture

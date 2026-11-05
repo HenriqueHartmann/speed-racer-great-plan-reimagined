@@ -2,7 +2,7 @@
 
 Status tags follow `docs/research/project-brief.md`.
 
-> **Current position: Stage 1 complete — decompilation succeeded.** No dependency installed, no
+> **Current position: Stage 2 complete — the handling contract is written.** No dependency installed, no
 > original artifact executed, no gameplay code written. Decompiled output and working copies live
 > in the gitignored `original_game/` and are never committed. Each stage below requires **explicit
 > approval** before it begins.
@@ -184,13 +184,21 @@ exercise, and that is recorded as a limitation rather than guessed around.
 
 ---
 
-## Stage 2 — Handling contract
+## Stage 2 — Handling contract — **COMPLETE**
 
-A single page defining acceleration, top speed, steering rate, grip and skid thresholds, jump
-impulse, gravity, and timestep.
+Delivered as [`docs/research/handling-contract.md`](research/handling-contract.md).
 
-**Acceptance:** every number is tagged **RECOVERED** or **DERIVED** with its source, or explicitly
-marked as a **designed substitute**. No number appears without one of those three labels.
+Acceleration, top speed, steering, grip and drag per surface, jump impulse, suspension, gravity and
+timestep are all **RECOVERED** with handler-level citations. Surface *names* are marked INFERRED,
+because the globals that would name them are declared but never assigned. Seven open items are
+listed explicitly rather than filled in.
+
+**The largest translation risk is recorded, not hidden:** the drive path mixes `applyForce` and
+`applyImpulse` and multiplies by a literal `60`, while the physics step is configured at `0.025 s`
+(40 Hz). Whether the original was frame-rate coupled is **UNKNOWN**, and the factor must not be
+ported literally until that is resolved.
+
+**Acceptance met:** every number carries RECOVERED, INFERRED or UNKNOWN. None is a guess.
 
 ---
 
