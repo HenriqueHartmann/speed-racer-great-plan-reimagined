@@ -44,10 +44,16 @@ npm run build   # production bundle
 
 W/A/S/D or the arrow keys drive; Space fires the Jacks; the digits `1`–`7` fire the seven gadgets.
 
-**The car is the original Mach 5**, decoded from the game's own Shockwave 3D world — 20 models,
-4,454 triangles, with its own textures. `tools/extract_mesh.sh` regenerates it from the artifact;
-`docs/research/w3d-format.md` documents the format and the decoder. The hand-built car it replaced
-is kept as the fallback for a missing model file.
+**The car and the course are both the original's**, decoded from the game's own Shockwave 3D
+worlds. The Mach 5 is 20 models and 4,454 triangles with its own textures; the track is the real
+37-segment course, 11,092 units of road that curves and climbs, starting at the line the original
+starts at. `tools/extract_mesh.sh` regenerates both from the artifact;
+`docs/research/w3d-format.md` documents the format and the decoder, and
+`docs/design/2026-11-05-original-track.md` the track.
+
+The scenery is not in yet: trees, walls, water and pickups carry gameplay rules and arrive in
+their own step. Drive off the road and the run ends, which is the original's own rule finally
+reachable on geometry that has somewhere to fall.
 
 ---
 

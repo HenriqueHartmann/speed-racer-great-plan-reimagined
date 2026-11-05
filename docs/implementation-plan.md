@@ -228,6 +228,9 @@ Dependencies installed: TypeScript, Vite, Three.js, Rapier (`@dimforge/rapier3d-
 | `src/sim/analytic-body.ts` | A reference body with no engine, so failures are attributable |
 | `src/physics/rapier-body.ts` | Rapier-backed chassis and raycast ground probe |
 | `src/render/scene.ts` | Three.js scene, chase camera, and the `VehicleView` boundary the car sits behind |
+| `src/render/track-view.ts` | The original course, drawn: road segments only |
+| `src/sim/ground-mesh.ts` | The triangle ground probe and the generated ground data's parser |
+| `src/physics/segment-colliders.ts` | One solid segment at a time, as `doM5ChangeSegment` kept it |
 | `src/render/mach5-original.ts` | The recovered Mach 5: gadget nodes, wheel placement, chassis assembly |
 | `src/render/model-frame.ts` | How the exported model hangs off the chassis — DOM-free, so it is testable |
 | `src/main.ts` | Accumulator loop: whole ticks for the sim, free frame rate for the renderer |
@@ -262,9 +265,10 @@ grip, which earlier research had wrongly recorded as existing solely in `doEnemy
 
 - Playwright smoke test not yet written.
 - Performance not yet measured against a declared workload; no FPS claim is made.
-- The track is still built from generated segments; the original's 760-mesh track world decodes
-  but has not been imported.
-- Rival AI not yet written: `doEnemy` is decompiled but nothing drives against the player.
+- The track's scenery is not in: of the level's 760 meshes only the 37 road segments are drawn and
+  driven on. Trees, walls, water, pickups and the invisible colliders carry gameplay rules.
+- Rival AI not yet written: `doEnemy` is decompiled and the 209-point racing line is recovered
+  with the track, but nothing drives against the player.
 
 ---
 

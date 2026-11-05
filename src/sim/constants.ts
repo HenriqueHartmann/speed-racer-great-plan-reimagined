@@ -324,17 +324,32 @@ export const COLLISION_DEBOUNCE_SECONDS =
 
 /**
  * RECOVERED - the grip/drag pairs and the `effectID` values that select them.
- * The `effectID` is the face index returned by the suspension raycast.
  *
- * The surface *names* are INFERRED from the particle textures and sounds each
- * branch triggers, not recovered: the globals that would name them
- * (`gEffectRoad`, `gEffectDirt`, ...) are declared but never assigned anywhere
- * in the recovered scripts.
+ * The *names* used to be guesses. They are now the track's own material
+ * names, read out of the decoded geometry, and two of the guesses were wrong:
+ * `grip 0.016` is ice and snow rather than "shallow water", and `drag 0.5` is
+ * grass rather than "heavy drag". The numbers did not change.
+ *
+ * SUPPORTED, not RECOVERED, and the distinction is the point. What is
+ * measured is that every segment carries exactly 16 sub-meshes and that
+ * sub-mesh N holds the same material in all 37. What is inferred is that
+ * `effectID` is that index - strongly, because the three IDs the original
+ * leaves unhandled, 5, 11 and 16, are exactly the three non-drivable
+ * materials: `ROCK_bROWN`, `ROCK_bLUE` and `TREE`. Drawn at random from 16
+ * that alignment is one chance in 560.
+ *
+ * UNRESOLVED: *why* index 5 of the raycast result is the sub-mesh. The
+ * artifact never shows the tuple's layout - across `doMach5` and `doEnemy`
+ * only `details[1][2]`, `[3]` and `[5]` are ever read - and Director's
+ * documentation is not part of this artifact, so it is not evidence this
+ * project may cite. The mapping does not depend on it.
+ *
+ * See `docs/design/2026-11-05-original-track.md` for the full table.
  */
 export interface Surface {
   readonly grip: number;
   readonly drag: number;
-  /** INFERRED, not recovered. */
+  /** The track's own material name. SUPPORTED; see the table's comment. */
   readonly inferredName: string;
 }
 
@@ -357,19 +372,19 @@ export const SURFACE_DEFAULT: Surface = { grip: 1, drag: 1.0, inferredName: 'def
 export const NO_GROUND_EFFECT_ID = 99;
 
 export const SURFACES_BY_EFFECT_ID: ReadonlyMap<number, Surface> = new Map([
-  [8, { grip: 0.016, drag: 1, inferredName: 'shallow water' }],
-  [9, { grip: 0.016, drag: 1, inferredName: 'shallow water' }],
-  [14, { grip: 0.016, drag: 1, inferredName: 'shallow water' }],
-  [15, { grip: 0.016, drag: 1, inferredName: 'shallow water' }],
-  [4, { grip: 0.8, drag: 1, inferredName: 'dirt' }],
-  [12, { grip: 1, drag: 0.75, inferredName: 'deep water' }],
-  [1, { grip: 1, drag: 1.0, inferredName: 'road' }],
-  [2, { grip: 1, drag: 1.0, inferredName: 'road' }],
-  [6, { grip: 1, drag: 1.0, inferredName: 'road' }],
-  [7, { grip: 1, drag: 1.0, inferredName: 'road' }],
-  [10, { grip: 1, drag: 1.0, inferredName: 'road' }],
-  [13, { grip: 1, drag: 1.0, inferredName: 'road' }],
-  [3, { grip: 1, drag: 0.5, inferredName: 'heavy drag' }],
+  [8, { grip: 0.016, drag: 1, inferredName: 'snow (ROAD_BLUESNOW_TRANS)' }],
+  [9, { grip: 0.016, drag: 1, inferredName: 'snow (ROAD_BLUESNOW)' }],
+  [14, { grip: 0.016, drag: 1, inferredName: 'ice (ROAD_BlueIce)' }],
+  [15, { grip: 0.016, drag: 1, inferredName: 'ice (ROAD_BlueIceTRANS)' }],
+  [4, { grip: 0.8, drag: 1, inferredName: 'dirt (ROAD_Dirt)' }],
+  [12, { grip: 1, drag: 0.75, inferredName: 'underwater sand (SAND_UNDERWATER)' }],
+  [1, { grip: 1, drag: 1.0, inferredName: 'finish line (ROAD_Finish; no geometry on level 1)' }],
+  [2, { grip: 1, drag: 1.0, inferredName: 'road (ROAD_Brown)' }],
+  [6, { grip: 1, drag: 1.0, inferredName: 'road (ROAD_Blue)' }],
+  [7, { grip: 1, drag: 1.0, inferredName: 'road (ROAD_Blue_Dark)' }],
+  [10, { grip: 1, drag: 1.0, inferredName: 'road (ROAD_DirtBlue)' }],
+  [13, { grip: 1, drag: 1.0, inferredName: 'road (ROAD_BluepBLUEd)' }],
+  [3, { grip: 1, drag: 0.5, inferredName: 'grass (GRASS)' }],
 ]);
 
 export function surfaceFor(effectId: number): Surface {

@@ -268,7 +268,17 @@ dirt, ice, snow, grass, underwater sand and water all exist as distinct material
 settle the mapping: the numeric IDs are mesh face indices, and nothing recovered so far links an
 index to a material name.
 
-That link was expected to be inside the `0x49` blocks, which are now decodable — so this is a
-**reachable** open question rather than a blocked one. The track world decodes to 760 meshes with
-per-face material assignments; reading the face index to material name mapping out of them is the
-next step whenever the surface table needs settling.
+That link is now read. The track decodes to 760 meshes, and each of the 37 road segments carries
+exactly 16 sub-meshes whose material is the same in all 37 — so the sub-mesh index is stable
+enough to be an id, and the id the original selects grip and drag with lines up with it. The
+decisive evidence is negative: the three ids `doMach5` leaves unhandled, 5, 11 and 16, are exactly
+the three non-drivable materials, `ROCK_bROWN`, `ROCK_bLUE` and `TREE`.
+
+So `grip 0.016` is **ice and snow**, not the "shallow water" the particle effects suggested, and
+`drag 0.5` is **grass**. The numbers never changed; only the names, which had been guesses.
+
+This is SUPPORTED rather than demonstrated, and the distinction is kept in
+`src/sim/constants.ts`. What stays UNRESOLVED is *why* index 5 of the raycast result is the
+sub-mesh: across `doMach5` and `doEnemy` the artifact only ever reads `details[1][2]`, `[3]` and
+`[5]`, so it never shows the tuple's layout, and Director's documentation is not part of this
+artifact. The mapping does not depend on the answer.

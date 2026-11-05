@@ -48,23 +48,30 @@ Every XMED resource is accounted for; none is unclassified.
 
 ---
 
-## 2. 3D worlds — VERIFIED (located; the Mach 5 extracted)
+## 2. 3D worlds — VERIFIED (the Mach 5 and the track extracted)
 
 Four payloads begin with the signature `3DEM` followed by `IFX `.
 
 | Movie | Resource ID | Payload bytes | Interpretation |
 |---|---:|---:|---|
-| `SR_level_1.dcr` | 7587 | 2552084 | **The level** — track geometry and props. 760 meshes; decodes, not yet imported |
+| `SR_level_1.dcr` | 7587 | 2552084 | **The level** — VERIFIED, 760 meshes: 37 road segments, 355 trees, 209 path waypoints, 68 pickups, 25 walls, 22 invisible colliders |
 | `SR_level_1.dcr` | 7589 | 206268 | **The Mach 5** — VERIFIED, 20 models matching `doMach5`'s properties one for one |
 | `SR_level_1.dcr` | 7591 | 104584 | The rival car — 9 models (INFERRED from the node names) |
 | `SR_MAIN.dcr` | 5143 | 200236 | Front-end showcase car (INFERRED) |
 
 `3DEM` is the Director Shockwave-3D cast-member stream; `IFX ` is Intel's Interactive-FX container.
 
-**Extracted so far:** resource 7589, the Mach 5, as `public/models/mach5.glb` — 20 meshes, 46
-primitives, 4,454 triangles, 5,194 vertices, 10 materials over 6 textures.
-`tools/extract_mesh.sh` regenerates it from the original artifact; `docs/research/w3d-format.md`
-documents the format and the decoder.
+**Extracted so far:**
+
+- Resource 7589, the Mach 5, as `public/models/mach5.glb` — 20 meshes, 46 primitives, 4,454
+  triangles, 5,194 vertices, 10 materials over 6 textures.
+- Resource 7587, the level, as `public/models/track.glb` — 760 meshes, 67,527 triangles, 242
+  materials over 29 textures — and `public/models/track-ground.bin`, the 37 `SEG_1`…`SEG_37` road
+  meshes reduced to 20,276 triangles of plain typed arrays, which is what the simulation drives on.
+
+`tools/extract_mesh.sh` regenerates both from the original artifact;
+`docs/research/w3d-format.md` documents the format and the decoder, and
+`docs/design/2026-11-05-original-track.md` the track's own structure.
 
 **Still open:** the coordinate convention is recovered in practice (Director is Z-up; the exporter
 writes a −90° X rotation on `SceneRoot` to satisfy glTF's Y-up requirement, which the renderer
@@ -215,8 +222,9 @@ decision — see `docs/research/project-brief.md` for the asset policy.
 
 - **Lingo scripts** — 36 recovered, in `original_game/decompiled/`. They are the source of every
   constant tagged `RECOVERED` in `src/sim/constants.ts`.
-- **One `3DEM` world** — resource 7589, the Mach 5, converted to glTF at `public/models/mach5.glb`
-  (§2). Its 50 sibling textures were extracted as JPEG during format research.
+- **Two `3DEM` worlds** — the Mach 5 (7589) and the level (7587), converted to glTF, plus the
+  level's road reduced to ground data the simulation reads (§2). Their 50 sibling textures were
+  extracted as JPEG during format research.
 
 **Not extracted:**
 
@@ -224,7 +232,8 @@ decision — see `docs/research/project-brief.md` for the asset policy.
 - No bitmap decoded beyond the 3D world textures.
 - No sound decoded.
 - No FLV frame decoded.
-- The track world (7587), the rival car (7591) and the showcase car (5143) decode but have not
-  been imported.
+- The rival car (7591) and the showcase car (5143) decode but have not been imported.
+- Of the track world, only the 37 road segments. Trees, walls, water, pickups and the invisible
+  `INV_` colliders carry gameplay rules and arrive in their own step.
 
-**Next step:** the track mesh. It is the same chain as the Mach 5 and needs no new tooling.
+**Next step:** the props, checked against `PREP` one kind at a time.
