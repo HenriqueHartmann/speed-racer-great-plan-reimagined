@@ -47,3 +47,6 @@ __pycache__/
 # -- Python bytecode ----------------------------------------------------------
 __pycache__/
 *.pyc
+
+# -- Superpowers plan workspace (scratch; the record lives in git history) ----
+.superpowers/
