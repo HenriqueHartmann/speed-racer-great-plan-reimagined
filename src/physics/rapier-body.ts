@@ -76,6 +76,26 @@ export class RapierWorld {
     return this.world.createCollider(desc, body);
   }
 
+  /**
+   * One segment of the track as a static triangle mesh.
+   *
+   * `PREP:381` makes every `SEG_` model a fixed rigid body with
+   * `restitution = 0` and `friction = 0`, which is why hitting the road scrubs
+   * speed through the impact rather than gripping or bouncing. The caller
+   * enables and disables these as the car changes segment, mirroring
+   * `doM5ChangeSegment`: exactly one is live at a time.
+   *
+   * The arrays are `GroundMesh`'s own, so the probe and the physics read the
+   * same triangles without a copy.
+   */
+  addTrimesh(positions: Float32Array, indices: Uint32Array): RAPIER.Collider {
+    const body = this.world.createRigidBody(this.rapier.RigidBodyDesc.fixed());
+    const desc = this.rapier.ColliderDesc.trimesh(positions, indices)
+      .setFriction(0)
+      .setRestitution(0);
+    return this.world.createCollider(desc, body);
+  }
+
   /** Registered so their force accumulators can be cleared each tick. */
   track(body: RAPIER.RigidBody): void {
     this.dynamicBodies.push(body);
