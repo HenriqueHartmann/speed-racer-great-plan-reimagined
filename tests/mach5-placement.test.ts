@@ -19,6 +19,7 @@ import {
   NEVER_DRAWN,
   volumeCentroid,
   wheelDrop,
+  RECOVERED_HOVER_RAY_LENGTH,
   type Vec3Like,
 } from '../src/render/model-frame.js';
 import { World } from '../src/sim/world.js';
@@ -98,6 +99,25 @@ describe('the recovered Mach 5 on the road', () => {
     // Most of the tyre has to be inside the body's own depth. This is the
     // assertion that fails when the body keeps its park translation.
     expect(top).toBeGreaterThan(underside + 0.3);
+  });
+
+  it('never drops a wheel further than the original\'s ray could ever reach', () => {
+    // Two cases, one clamp, and they do not have the same standing; the
+    // constant's own note sets them out. A GROUNDED wheel reaches 1.2 only
+    // because `HOVER_RAY_LENGTH` is our SUBSTITUTE - measured along the
+    // 209-point racing line, p50 1.026, p95 1.169, max 1.2 - where the
+    // original's `#maxDistance: 1` could never report past 1.0. An UNGROUNDED
+    // wheel is forced to `pHoverDist` by `doMach5:474,480`, so the original
+    // genuinely dropped it to 0.85; suppressing that is the owner's call,
+    // taken because play reported it as the wheels stretching off the car.
+    const recovered = wheelDrop(RECOVERED_HOVER_RAY_LENGTH, K.WHEEL_RADIUS);
+    expect(wheelDrop(K.HOVER_RAY_LENGTH, K.WHEEL_RADIUS)).toBe(recovered);
+    expect(wheelDrop(K.HOVER_DISTANCE, K.WHEEL_RADIUS)).toBe(recovered);
+
+    // Compression is untouched: the floor still owns everything below 0.75.
+    expect(wheelDrop(0.3, K.WHEEL_RADIUS)).toBe(wheelDrop(0.75, K.WHEEL_RADIUS));
+    // And real travel between the two clamps still moves the wheel.
+    expect(wheelDrop(0.9, K.WHEEL_RADIUS)).toBeLessThan(wheelDrop(0.8, K.WHEEL_RADIUS));
   });
 
   it('closes the Deflector canopy over the cockpit', () => {

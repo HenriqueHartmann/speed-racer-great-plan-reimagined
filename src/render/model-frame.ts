@@ -119,7 +119,8 @@ export const ALWAYS_DRAWN: ReadonlySet<string> = new Set(['scope_door']);
  * simulation uses, and the result puts the tyre's underside on the road.
  */
 export function wheelDrop(hoverDistance: number, wheelRadius: number): number {
-  return -(Math.max(WHEEL_DROP_FLOOR, hoverDistance) - wheelRadius);
+  const clamped = Math.min(RECOVERED_HOVER_RAY_LENGTH, Math.max(WHEEL_DROP_FLOOR, hoverDistance));
+  return -(clamped - wheelRadius);
 }
 
 /**
@@ -127,6 +128,34 @@ export function wheelDrop(hoverDistance: number, wheelRadius: number): number {
  * to drop the wheel, so a fully extended corner still has its wheel on the car.
  */
 export const WHEEL_DROP_FLOOR = 0.75;
+
+/**
+ * SUBSTITUTE - the furthest the drawn suspension may extend. One clamp, and
+ * the two cases it covers do not have the same standing.
+ *
+ * A grounded wheel: RECOVERED. The original's raycast is `#maxDistance: 1`
+ * (`doMach5:440`), so a hit could never report more than 1.0 and the wheel
+ * drawn from it could never fall past `max(0.75, 1.0)`. Our ray is
+ * `HOVER_RAY_LENGTH`, a SUBSTITUTE raised to 1.2 so that a parked car can
+ * stand still - see that constant's own note. Measured by driving the
+ * 209-point racing line as far as segment 15, a grounded wheel then reaches
+ * the full 1.2: p50 1.026, p95 1.169, max 1.2. The raised ray is a fix to the
+ * physics and has no business lengthening the drawn suspension as well, so
+ * here the clamp restores what the original could draw.
+ *
+ * An ungrounded wheel: SUBSTITUTE, and a departure. `doMach5:474` and `:480`
+ * force `pHoverDistList[i] = pHoverDist` whenever the ray misses or the hit
+ * lies beyond it, so the original really did drop a loose wheel to
+ * `1.2 - 0.35 = 0.85` against its grounded neighbours' 0.663. Along the
+ * racing line a wheel is loose on 52% of wheel-ticks, which is what play
+ * reported as the wheels stretching away from the car over crests and dips.
+ * We do not reproduce it. The owner chose the clamp over the fidelity.
+ *
+ * Either way this is drawing only: `wheelDrop` is called from
+ * `mach5-original.ts` alone, nothing in `src/sim/` reads it, and no replay
+ * can diverge because of it.
+ */
+export const RECOVERED_HOVER_RAY_LENGTH = 1;
 
 /**
  * The centre of mass of a closed mesh of uniform density, which is what Havok
