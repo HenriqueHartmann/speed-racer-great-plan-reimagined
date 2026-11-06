@@ -305,10 +305,37 @@ export const JACKS_COOLDOWN_SECONDS = JACKS_COOLDOWN_TICKS / TICKS_PER_SECOND;
 // Airborne self-righting
 // ---------------------------------------------------------------------------
 
-/** RECOVERED - pitch beyond this engages the corrector dashpot. */
+/**
+ * RECOVERED - pitch beyond this engages the corrector, and roll beyond the
+ * next one does too: `doMach5:784`, `(pPowerCoeff < 1) and ((abs(RotX) > 80)
+ * or (abs(RotY) > 45))`.
+ *
+ * Both were recovered long ago and neither was used. Only the damping half of
+ * the original's self-righting was implemented - the half that stops a car
+ * spinning - so a car that came to rest on its side stayed on its side, which
+ * is what play found.
+ */
 export const RIGHTING_PITCH_DEG = 80;
-/** RECOVERED - as does roll beyond this. */
 export const RIGHTING_ROLL_DEG = 45;
+
+/**
+ * SUBSTITUTE - how hard the corrector pushes the car back onto its wheels.
+ *
+ * The original uses a Havok angular dashpot, `makeAngularDashpot
+ * ("m5Corrector")`, a constraint driving the chassis toward a target rotation
+ * with `strength = pChassisRB.mass * max(|RotX|, |RotY|) / 90` and
+ * `damping = 1000` (`doMach5:786-791`). We cannot reproduce that solver, and
+ * two things about it stay UNRESOLVED: the dashpot's own integration, and its
+ * target of `vector(50, 0, rotz)` - a 50 on the X axis that does not read as
+ * upright and that the artifact never explains.
+ *
+ * So the trigger and the strength scaling are recovered and used as they
+ * stand; what the torque is applied toward is ours: level, with the car's
+ * heading left alone, which is what self-righting means. This multiplier sets
+ * the rate and is tuned to right the car in about two seconds rather than
+ * snapping it, which the dashpot's heavy damping also would not have done.
+ */
+export const RIGHTING_TORQUE = 2.5;
 /** RECOVERED - beyond this on either axis, angular velocity is cut... */
 export const RIGHTING_CUT_DEG = 30;
 /** RECOVERED - ...by this factor, with an extra angular impulse of -L * 0.5. */

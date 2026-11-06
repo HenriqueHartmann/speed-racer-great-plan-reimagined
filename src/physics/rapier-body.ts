@@ -279,6 +279,11 @@ export class RapierChassis implements ChassisBody {
    * unless it is told otherwise, which is a bug this project has already paid
    * for once.
    */
+  /** Place the chassis at an orientation outright, for tests and recovery. */
+  setRotation(q: { x: number; y: number; z: number; w: number }): void {
+    this.body.setRotation(q, true);
+  }
+
   respawn(position: Vec3): void {
     this.body.setTranslation({ x: position.x, y: position.y, z: position.z }, true);
     this.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);

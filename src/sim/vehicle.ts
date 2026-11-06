@@ -423,11 +423,35 @@ function updateSelfRighting(state: VehicleState, body: ChassisBody): void {
   const pitch = Math.abs(body.pitchDeg);
   const roll = Math.abs(body.rollDeg);
 
+  // The damping half first. `doMach5:797-800`: beyond 30 degrees on either
+  // axis with a wheel off the ground, the spin is cut hard.
   if (pitch > K.RIGHTING_CUT_DEG || roll > K.RIGHTING_CUT_DEG) {
     body.angularVelocity = scale(body.angularVelocity, K.RIGHTING_VELOCITY_CUT);
     body.applyAngularImpulse(
       scale(body.angularVelocity, -body.mass * K.RIGHTING_MOMENTUM_IMPULSE),
     );
+  }
+
+  // Then the corrector, which the original runs as a Havok angular dashpot -
+  // `makeAngularDashpot("m5Corrector")`, created while `pPowerCoeff < 1` and
+  // `|RotX| > 80` or `|RotY| > 45`, deleted the moment that clears.
+  //
+  // The order follows the original's: a dashpot is a constraint, solved during
+  // Havok's step, so it acts *after* the script's velocity damping. Be careful
+  // what you claim for that, though - swapping the two here changes nothing a
+  // test can see, and a first draft of this comment said the order was what
+  // made the car come up. It was not; a missing floor in the test was.
+  //
+  // The trigger and the strength scaling are the original's. What the torque
+  // drives toward is ours: see RIGHTING_TORQUE.
+  if (pitch > K.RIGHTING_PITCH_DEG || roll > K.RIGHTING_ROLL_DEG) {
+    const strength = (Math.max(pitch, roll) / 90) * body.mass * K.RIGHTING_TORQUE;
+    // The axis that turns the car's own up vector back onto the world's:
+    // up x (0,0,1), which is zero exactly when it is already level.
+    const up = body.up;
+    const axis = vec3(up.y, -up.x, 0);
+    const length = Math.hypot(axis.x, axis.y);
+    if (length > 1e-6) body.applyAngularImpulse(scale(axis, strength / length));
   }
 }
 
