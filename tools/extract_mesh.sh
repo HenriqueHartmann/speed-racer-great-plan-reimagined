@@ -99,7 +99,12 @@ node "$ROOT/tools/build_track_solids.mjs" "$OUT/track.glb" "$OUT/track-solids.bi
 echo "==> building the objects"
 node "$ROOT/tools/build_track_objects.mjs" "$OUT/track.glb" "$OUT/track-objects.bin"
 
+# 8. And the rivals' racing line: the 209 path_ waypoints, quantised as
+#    PREP:308-311 quantises them.
+echo "==> building the racing line"
+node "$ROOT/tools/build_track_path.mjs" "$OUT/track.glb" "$OUT/track-path.bin"
+
 echo
 echo "wrote:"
 sha256sum "$OUT/mach5.glb" "$OUT/track.glb" "$OUT/track-ground.bin" \
-          "$OUT/track-solids.bin" "$OUT/track-objects.bin"
+          "$OUT/track-solids.bin" "$OUT/track-objects.bin" "$OUT/track-path.bin"

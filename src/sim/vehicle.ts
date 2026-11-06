@@ -219,7 +219,7 @@ export function stepVehicle(
  * with a special case at segment seams. Segment selection belongs to the track,
  * not the vehicle, so that lives behind `GroundProbe`.
  */
-function updateHover(
+export function updateHover(
   state: VehicleState,
   body: ChassisBody,
   probe: GroundProbe,
@@ -417,7 +417,7 @@ function updateDrive(
  * the larger thresholds; the velocity cut below reproduces the part that does not
  * require an engine-specific constraint.
  */
-function updateSelfRighting(state: VehicleState, body: ChassisBody): void {
+export function updateSelfRighting(state: VehicleState, body: ChassisBody): void {
   if (state.powerCoeff >= 1) return;
 
   const pitch = Math.abs(body.pitchDeg);
@@ -466,7 +466,7 @@ function updateSelfRighting(state: VehicleState, body: ChassisBody): void {
  * sideways momentum it had, and on touchdown the original zeroes angular
  * velocity once - the landing "chirp".
  */
-function updateLateralGrip(state: VehicleState, body: ChassisBody): void {
+export function updateLateralGrip(state: VehicleState, body: ChassisBody): void {
   // RECOVERED: while the Grip gadget is active the original overwrites pGrip
   // with 1 every update, so the surface underneath stops mattering.
   if (state.gadgets.grip.active) {

@@ -532,3 +532,46 @@ export const SURFACES_BY_EFFECT_ID: ReadonlyMap<number, Surface> = new Map([
 export function surfaceFor(effectId: number): Surface {
   return SURFACES_BY_EFFECT_ID.get(effectId) ?? SURFACE_DEFAULT;
 }
+
+// --- the rivals -------------------------------------------------------------
+// `019_BehaviorScript_26_-_doEnemy.ls`. The chassis constants a rival shares
+// with the Mach 5 are not repeated here; only what differs or is its own.
+
+/** RECOVERED - `doEnemy:38`: `pCarMass = 20000`, against the Mach 5's 30000. */
+export const RIVAL_MASS = 20000;
+
+/** RECOVERED - `beginSprite:34`: `pMaxSpeed = gM5MaxSpeed * 0.8` before the race. */
+export const RIVAL_BASE_SPEED_FACTOR = 0.8;
+
+/**
+ * RECOVERED - `doEnemy:424`. A rival takes the next waypoint when it comes
+ * within this of the current one.
+ *
+ * Measured against the asset, the line's own gaps are 21.5 at their shortest
+ * and 62.6 at the median, so a car always steers toward a point it will
+ * overshoot rather than circle.
+ */
+export const RIVAL_WAYPOINT_REACH = 10;
+
+/** RECOVERED - `doEnemy:454`: `turnFactor = min(40, absDif) / 40`. */
+export const RIVAL_TURN_FULL_DEG = 40;
+
+/** RECOVERED - `doEnemy:455`: `distFactor = 1 - (min(50, goto_dist) / 50)`. */
+export const RIVAL_DIST_FULL = 50;
+
+/**
+ * SUBSTITUTE - the yaw damping a rival applies against its own rotation.
+ *
+ * `doEnemy:457` adds `vector(0, 0, -tAngMom * 0.25)` to every steering
+ * impulse, where `tAngMom` is Havok's `angularmomentum.z` - the moment of
+ * inertia times the yaw rate, in Havok's units. Our chassis inertia is a
+ * substitute already (see `CHASSIS_INERTIA_MULTIPLIER`), so there is no
+ * recovered quantity to multiply, and the 0.25 cannot be carried across
+ * unchanged.
+ *
+ * What is recovered is the shape: a term opposing the current yaw rate,
+ * proportional to it, folded into the same impulse. Expressed against mass and
+ * yaw rate, this is the coefficient that reproduces it. UNRESOLVED stays
+ * UNRESOLVED: the original's number is 0.25 of something we cannot measure.
+ */
+export const RIVAL_YAW_DAMPING = 0.25;
