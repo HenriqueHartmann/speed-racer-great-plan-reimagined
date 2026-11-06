@@ -302,13 +302,40 @@ describe('pickups', () => {
     expect(world.race.score).toBe(before); // consumed, not repeatable
   });
 
-  it('oxygen refills, clamped at the maximum', () => {
+  it('oxygen refills, clamped at the maximum, and scores', () => {
+    // `handlePickups.ls:139-140`: +50 oxygen capped at 100, and +500 score.
     const track = new Track({ ground: flatGroundMesh(2) });
     track.addProp(1, 'pickup', vec3(0, 0, 1), vec3(6, 6, 6), 'oxygen');
     const { world } = worldOn(track);
     world.race.oxygen = 20;
     world.step(IDLE);
     expect(world.race.oxygen).toBe(70);
+    expect(world.race.score).toBe(K.CANDY_RED_SCORE);
+  });
+
+  it('scores each candy what the original scored it', () => {
+    // Red is 500 (`handlePickups.ls:117`), purple is 1000 (`:93`). Both were
+    // scored 500 here, because both were reading REPAIR_SCORE.
+    const score = (pickup: 'candyRed' | 'candyPurple') => {
+      const track = new Track({ ground: flatGroundMesh(2) });
+      track.addProp(1, 'pickup', vec3(0, 0, 1), vec3(6, 6, 6), pickup);
+      const { world } = worldOn(track);
+      world.step(IDLE);
+      return world.race.score;
+    };
+    expect(score('candyRed')).toBe(500);
+    expect(score('candyPurple')).toBe(1000);
+  });
+
+  it('scores the robot pickup, which did nothing at all', () => {
+    // `handlePickups.ls:69`. `applyPickup` had no case for it, so ten of the
+    // level's pickups were silently inert.
+    const track = new Track({ ground: flatGroundMesh(2) });
+    const robot = track.addProp(1, 'pickup', vec3(0, 0, 1), vec3(6, 6, 6), 'robot');
+    const { world } = worldOn(track);
+    world.step(IDLE);
+    expect(world.race.score).toBe(1000);
+    expect(robot?.active).toBe(false);
   });
 });
 

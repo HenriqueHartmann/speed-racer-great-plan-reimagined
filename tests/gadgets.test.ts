@@ -245,3 +245,50 @@ describe('events', () => {
     expect(fired).toEqual(['lights', 'blades']);
   });
 });
+describe('the Robot is one-shot', () => {
+  /**
+   * `gROBOTMODE` is a four-state machine in `doMach5`: 0 ready, 1-3 in flight,
+   * 4 spent and `nothing()`. The key is gated on 0 (`:249`), so once the Robot
+   * has flown it cannot be fired again - and the only thing that brings it
+   * back is a Robot pickup, `gROBOTMODE = 4 -> 0` (`handlePickups.ls:66-68`).
+   *
+   * Ours was a plain toggle with no spent state at all, which left the ten
+   * Robot pickups in the level with nothing to rearm.
+   */
+  it('refuses a second launch once it has flown', () => {
+    const { world } = freshWorld();
+    world.step(press('robot'));
+    expect(world.vehicle.gadgets.robot.active).toBe(true);
+
+    // Toggling it off is how it flies; after that it is spent.
+    world.step(press('robot'));
+    expect(world.vehicle.gadgets.robot.active).toBe(false);
+
+    world.step(press('robot'));
+    expect(world.vehicle.gadgets.robot.active).toBe(false);
+  });
+
+  it('is rearmed by a Robot pickup', () => {
+    const track = new Track({ ground: flatGroundMesh(2) });
+    const { world } = freshWorld(track);
+    world.step(press('robot'));
+    world.step(press('robot'));
+    world.step(press('robot'));
+    expect(world.vehicle.gadgets.robot.active).toBe(false);
+
+    track.addProp(1, 'pickup', vec3(0, 0, 1), vec3(6, 6, 6), 'robot');
+    world.step(NO_INPUT);
+
+    world.step(press('robot'));
+    expect(world.vehicle.gadgets.robot.active).toBe(true);
+  });
+
+  it('leaves the other gadgets toggling freely', () => {
+    const { world } = freshWorld();
+    for (let i = 0; i < 3; i++) {
+      world.step(press('lights'));
+      expect(world.vehicle.gadgets.lights.active).toBe(i % 2 === 0);
+    }
+  });
+});
+

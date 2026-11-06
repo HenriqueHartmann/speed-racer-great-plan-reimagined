@@ -340,9 +340,24 @@ export const BAR_SNAP = 0.5;
 export const OXYGEN_DRAIN = 0.2;
 /** RECOVERED - damage per update while out of oxygen, or underwater unprotected. */
 export const DROWN_DAMAGE = 0.3;
-/** RECOVERED - repair pickup. */
+/** RECOVERED - wrench: -50 damage (`handlePickups.ls:35`), +500 (`:44`). */
 export const REPAIR_AMOUNT = 50;
 export const REPAIR_SCORE = 500;
+
+/**
+ * RECOVERED - what each pickup is worth, from `handlePickups.ls`.
+ *
+ * They are not all the same, and two were wrong here. Red candy is 500
+ * (`:117`) and purple is **1000** (`:93`); both were scored 500, because both
+ * read `REPAIR_SCORE`. The robot is 1000 (`:69`) and scored nothing at all,
+ * because `applyPickup` had no case for it - ten of the level's pickups were
+ * inert. `docs/research/open-questions.md` lists these as UNKNOWN; they are
+ * in the handler, and that question is stale.
+ */
+export const CANDY_RED_SCORE = 500;
+export const CANDY_PURPLE_SCORE = 1000;
+export const ROBOT_SCORE = 1000;
+export const OXYGEN_SCORE = 500;
 /** RECOVERED - oxygen pickup. */
 export const OXYGEN_PICKUP = 50;
 /** RECOVERED - awarded by `doFinish` when finishing first. */

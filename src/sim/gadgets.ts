@@ -63,6 +63,16 @@ export const GADGET_BY_ID: ReadonlyMap<GadgetId, GadgetSpec> = new Map(
  */
 export interface GadgetState {
   active: boolean;
+  /**
+   * One-shot gadgets that have been used and not yet replenished.
+   *
+   * Only the Robot. `gROBOTMODE` is a four-state machine in `doMach5`: 0
+   * ready, 1-3 in flight, 4 spent and `nothing()` (`:516-557`). The key is
+   * gated on 0 (`:249`), so once it has flown it stays gone - and the only
+   * thing that brings it back is a Robot pickup, `gROBOTMODE = 4 -> 0`
+   * (`handlePickups.ls:66-68`). Ten of those sit in the level.
+   */
+  spent: boolean;
   /** Tick at which it expires. `Infinity` for gadgets that never time out. */
   expiresAtTick: number;
   /** Seconds left, derived for display only. */
@@ -74,7 +84,7 @@ export type GadgetStates = Record<GadgetId, GadgetState>;
 export function createGadgetStates(): GadgetStates {
   const states = {} as GadgetStates;
   for (const g of GADGETS) {
-    states[g.id] = { active: false, expiresAtTick: Infinity, remaining: 0 };
+    states[g.id] = { active: false, expiresAtTick: Infinity, remaining: 0, spent: false };
   }
   return states;
 }
@@ -115,8 +125,13 @@ export function toggleGadget(
     state.active = false;
     state.expiresAtTick = Infinity;
     state.remaining = 0;
+    // The Robot does not come back by being switched off: it has flown.
+    if (id === 'robot') state.spent = true;
     return 'deactivated';
   }
+
+  // `doMach5:249` gates the Robot key on `gROBOTMODE = 0`.
+  if (state.spent) return 'refused';
 
   if (id === 'jacks' && ctx.powerCoeff !== 1) return 'refused';
 
@@ -154,4 +169,15 @@ export function stepGadgets(
   }
 
   return expired;
+}
+
+/**
+ * Put the Robot back in the car.
+ *
+ * `handlePickups.ls:66-68` - `if gROBOTMODE = 4 then gROBOTMODE = 0`. The one
+ * thing a Robot pickup does besides scoring, and the only way the gadget
+ * returns once it has flown.
+ */
+export function rearmRobot(states: Record<GadgetId, GadgetState>): void {
+  states.robot.spent = false;
 }

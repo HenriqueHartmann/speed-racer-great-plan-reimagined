@@ -20,6 +20,7 @@ import {
   type VehicleState,
 } from './vehicle.js';
 import { overlaps, resolveImpact } from './collision.js';
+import { rearmRobot } from './gadgets.js';
 import { segmentIndexFor, type Track } from './track.js';
 
 /** Why a run ended. */
@@ -213,19 +214,28 @@ export class World {
         break;
       case 'oxygen':
         this.collectOxygen();
+        this.award(K.OXYGEN_SCORE);
         break;
       case 'candyRed':
+        this.award(K.CANDY_RED_SCORE);
+        break;
       case 'candyPurple':
-        this.race.score += K.REPAIR_SCORE;
-        this.events.push({
-          tick: this.tick,
-          kind: 'repair',
-          value: this.race.score,
-        });
+        this.award(K.CANDY_PURPLE_SCORE);
+        break;
+      case 'robot':
+        // `handlePickups.ls:66-69`: the score, and `gROBOTMODE = 4 -> 0`,
+        // which is the only way to get the Robot back once it has flown.
+        this.award(K.ROBOT_SCORE);
+        rearmRobot(this.vehicle.gadgets);
         break;
       default:
         break;
     }
+  }
+
+  private award(points: number): void {
+    this.race.score += points;
+    this.events.push({ tick: this.tick, kind: 'repair', value: this.race.score });
   }
 
   /** Advance `n` ticks, pulling input per tick. */
