@@ -37,3 +37,27 @@ export class Rng {
     this.state = state >>> 0;
   }
 }
+
+/**
+ * An independent stream for one actor, derived from the world seed.
+ *
+ * SUBSTITUTE. The original had a single global generator and every rival drew
+ * from it - `doEnemy:789`, `:767`, `prepareCar:128`, `doJump:289`,
+ * `collisionHandler:177`. Sharing one stream between three rivals would make
+ * each one's sequence depend on how many draws the others made, and so on how
+ * many collisions they had. The replay would still reproduce; the isolation
+ * would not, and a change to one rival would silently reshuffle the rest.
+ *
+ * These streams therefore do not reproduce the original's sequence and no
+ * claim is made that they do.
+ *
+ * The index is mixed with the golden-ratio constant before seeding. Be honest
+ * about why: mutation shows plain `seed + index` passes every test here,
+ * because mulberry32's first step already adds a large odd constant and
+ * scrambles, so adjacent seeds give unrelated streams. The mix is cheap
+ * insurance against a future generator that is less forgiving, not a
+ * requirement anything has demonstrated.
+ */
+export function substream(seed: number, index: number): Rng {
+  return new Rng((seed ^ Math.imul(index + 1, 0x9e37_79b9)) >>> 0);
+}
