@@ -269,6 +269,13 @@ export class World {
       this.events.push({ tick: this.tick, kind: 'wrong-way' });
     }
 
+    // Submerged: on the water surface *and* below the waterline. Nothing in
+    // this project set this until the track was decoded and surface 12 had
+    // somewhere to come from.
+    r.underwater =
+      this.vehicle.effectId === K.WATER_EFFECT_ID &&
+      this.body.position.z <= K.WATERLINE_Z;
+
     // Oxygen is the Frogger's supply, not a drowning timer.
     //
     // RECOVERED, and a correction to earlier documentation: the original drains

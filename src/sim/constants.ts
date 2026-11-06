@@ -434,6 +434,23 @@ export const OXYGEN_SCORE = 500;
  * half-diagonal is 1.51 - well under half the reach.
  */
 export const PICKUP_REACH = 4;
+
+/**
+ * RECOVERED - the surface id that is water, and the height below which being
+ * on it means being under it.
+ *
+ * `doMach5:899-910` is a `case effectID` statement whose branch `12:` sets
+ * grip 1 and drag 0.75, and nested inside that branch is
+ * `if mMach5.transform.position.z <= 0 then isUnderWater = 1`.
+ *
+ * Both halves matter. Surface 12 is live on this course - 350 triangles in
+ * segments 9, 10, 13, 15, 16, 28, 30 and 31, exactly the segments holding the
+ * water planes and the oxygen pickups - but 3,590 live triangles across ten
+ * different surfaces dip below z = 0, ordinary road among them. Height alone
+ * would drown the player on dry asphalt.
+ */
+export const WATER_EFFECT_ID = 12;
+export const WATERLINE_Z = 0;
 /** RECOVERED - oxygen pickup. */
 export const OXYGEN_PICKUP = 50;
 /** RECOVERED - awarded by `doFinish` when finishing first. */

@@ -254,12 +254,24 @@ export function isDrawnTrackNode(name: string): boolean {
  */
 export type TrackNodeRole = 'drawn' | 'hidden';
 
-const DRAWN = /^(SEG|WALL|RAIL|MISC)_\d+$/;
+const DRAWN = /^(SEG|WALL|RAIL|MISC|WATER)_\d+$/;
+/** The skydome, which `PREP:64` picks out by name and the camera carries. */
+const SKY = /^Sphere\d+$/;
 /** The level's objects, drawn from their own decoded meshes. */
 const DRAWN_OBJECTS = /^(Tree_\d+|pickup_[A-Za-z]+\d+)$/;
 
 export function trackNodeRole(name: string): TrackNodeRole {
-  return DRAWN.test(name) || DRAWN_OBJECTS.test(name) ? 'drawn' : 'hidden';
+  return DRAWN.test(name) || DRAWN_OBJECTS.test(name) || SKY.test(name) ? 'drawn' : 'hidden';
+}
+
+/** Whether a node is one of the water planes, which slosh and never collide. */
+export function isWaterNode(name: string): boolean {
+  return /^WATER_\d+$/.test(name);
+}
+
+/** Whether a node is the skydome. */
+export function isSkyNode(name: string): boolean {
+  return SKY.test(name);
 }
 
 /**

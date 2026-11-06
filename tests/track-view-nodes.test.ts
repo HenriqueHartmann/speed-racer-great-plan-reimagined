@@ -79,8 +79,16 @@ describe('trackNodeRole', () => {
     }
   });
 
-  it('hides everything that is not this step', () => {
-    for (const name of ['path_01', 'carPos_Mach5', 'WATER_34', 'Sphere01']) {
+  it('draws the water and the sky', () => {
+    // Pass 3. The water planes slosh and carry no physics at all; the dome
+    // follows the camera, as `doCamera:56` carries it.
+    expect(trackNodeRole('WATER_34')).toBe('drawn');
+    expect(trackNodeRole('Sphere01')).toBe('drawn');
+  });
+
+  it('hides what is still not drawn', () => {
+    // The racing line and the spawn marker are coordinates, not art.
+    for (const name of ['path_01', 'path_209', 'carPos_Mach5']) {
       expect(trackNodeRole(name), name).toBe('hidden');
     }
   });

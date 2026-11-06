@@ -9,7 +9,7 @@ import { AnalyticBody, FlatGround } from '../src/sim/analytic-body.js';
 import { flatGroundMesh } from '../src/sim/ground-mesh.js';
 import { Track } from '../src/sim/track.js';
 import { resolveImpact } from '../src/sim/collision.js';
-import { vec3, NO_INPUT, type VehicleInput } from '../src/sim/vehicle.js';
+import { vec3, NO_INPUT, type GroundProbe, type VehicleInput } from '../src/sim/vehicle.js';
 import {
   GADGETS,
   GADGET_BY_KEY,
@@ -23,12 +23,31 @@ import {
 } from '../src/sim/gadgets.js';
 import * as K from '../src/sim/constants.js';
 
-function freshWorld(track?: Track) {
-  const body = new AnalyticBody();
+/**
+ * Ground that is the water surface, below the waterline.
+ *
+ * `race.underwater` used to be poked by hand here, because nothing in `src/`
+ * ever set it. The world now computes it from the surface under the car and
+ * the car's height, so these tests have to put the car in water rather than
+ * assert that it is.
+ */
+function submerged(): GroundProbe {
+  const height = -3;
+  return {
+    castDown: (from, maxDistance) => {
+      const distance = from.z - height;
+      if (distance < 0 || distance > maxDistance) return null;
+      return { distance, point: vec3(from.x, from.y, height), effectId: K.WATER_EFFECT_ID };
+    },
+  };
+}
+
+function freshWorld(track?: Track, probe?: GroundProbe) {
+  const body = new AnalyticBody(K.CHASSIS_MASS, vec3(0, 0, probe ? -3 + K.SPAWN_HEIGHT : K.SPAWN_HEIGHT));
   const world = new World({
     seed: 1,
     body,
-    probe: track ?? new FlatGround(),
+    probe: probe ?? track ?? new FlatGround(),
     ...(track ? { track } : {}),
     stepPhysics: (dt) => body.integrate(dt),
   });
@@ -197,10 +216,9 @@ describe('Blades', () => {
 
 describe('Frogger and oxygen', () => {
   it('drains oxygen while deployed, not while merely underwater', () => {
-    const { world } = freshWorld();
+    const { world } = freshWorld(undefined, submerged());
 
     // Underwater without the scope: damage, and oxygen untouched.
-    world.race.underwater = true;
     const oxygenBefore = world.race.oxygen;
     world.step(NO_INPUT);
     expect(world.race.oxygen).toBe(oxygenBefore);
@@ -226,8 +244,7 @@ describe('Frogger and oxygen', () => {
   });
 
   it('does not refill when deployed already submerged', () => {
-    const { world } = freshWorld();
-    world.race.underwater = true;
+    const { world } = freshWorld(undefined, submerged());
     world.race.oxygen = 10;
     world.step(press('frogger'));
     expect(world.race.oxygen).toBeLessThan(K.STAT_MAX);

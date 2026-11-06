@@ -369,6 +369,11 @@ async function main(): Promise<void> {
     }
     propColliders.sync();
 
+    // The scenery that moves: the water's slosh and the skydome riding with
+    // the camera. Per rendered frame, not per tick - nothing in it feeds back
+    // into the simulation.
+    trackView?.update(chase.camera.position);
+
     renderer.render(scene, chase.camera);
 
     const surface = v.surface.inferredName;

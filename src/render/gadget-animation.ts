@@ -55,3 +55,21 @@ export function stepScope(factor: number, active: boolean): number {
     ? Math.min(1, factor + SCOPE_RISE)
     : Math.max(SCOPE_REST, factor - SCOPE_FALL);
 }
+
+/**
+ * RECOVERED - `PLAY.ls:52`, `cDirection = cDirection + 8`, wrapping at 360.
+ *
+ * Forty-five frames to the cycle.
+ */
+const WATER_STEP_DEG = 8;
+
+/** RECOVERED - `PLAY.ls:50`: the plane slides by `sin(phase) * 1.0` on X. */
+const WATER_AMPLITUDE = 1;
+
+export function stepWater(phaseDeg: number): number {
+  return (phaseDeg + WATER_STEP_DEG) % 360;
+}
+
+export function waterOffset(phaseDeg: number): number {
+  return Math.sin((phaseDeg * Math.PI) / 180) * WATER_AMPLITUDE;
+}

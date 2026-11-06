@@ -5,7 +5,14 @@
  * the Frogger closed the canopy and left the periscope where it was.
  */
 import { describe, it, expect } from 'vitest';
-import { stepBlades, stepScope, BLADE_REST, SCOPE_REST } from '../src/render/gadget-animation.js';
+import {
+  stepBlades,
+  stepScope,
+  stepWater,
+  waterOffset,
+  BLADE_REST,
+  SCOPE_REST,
+} from '../src/render/gadget-animation.js';
 
 describe('the Blades', () => {
   it('grows out over ten frames rather than appearing', () => {
@@ -65,5 +72,37 @@ describe('the periscope', () => {
     // matrix. The original starts it at 0.01 for that reason.
     expect(SCOPE_REST).toBe(0.01);
     expect(stepScope(SCOPE_REST, false)).toBe(SCOPE_REST);
+  });
+});
+
+/**
+ * The water's slosh.
+ *
+ * `PLAY.ls:48-55` moves each water plane along X by `sin(cDirection)` while
+ * `cDirection` advances 8 degrees a frame and wraps at 360 - a 45-frame
+ * period, one unit either way. The planes carry no physics at all: `PREP:315`
+ * gives them no rigid body, no collision modifier and no segment array.
+ */
+describe('the water', () => {
+  it('sloshes one unit either way', () => {
+    const seen: number[] = [];
+    let phase = 0;
+    for (let frame = 0; frame < 45; frame++) {
+      seen.push(waterOffset(phase));
+      phase = stepWater(phase);
+    }
+    expect(Math.max(...seen)).toBeCloseTo(1, 2);
+    expect(Math.min(...seen)).toBeCloseTo(-1, 2);
+  });
+
+  it('comes back to where it started after forty-five frames', () => {
+    let phase = 0;
+    for (let frame = 0; frame < 45; frame++) phase = stepWater(phase);
+    expect(phase).toBe(0);
+  });
+
+  it('advances eight degrees a frame', () => {
+    expect(stepWater(0)).toBe(8);
+    expect(stepWater(352)).toBe(0);
   });
 });

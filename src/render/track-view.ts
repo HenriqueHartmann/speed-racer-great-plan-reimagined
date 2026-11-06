@@ -13,7 +13,8 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { isTrackObjectNode, trackNodeRole } from './model-frame.js';
+import { isSkyNode, isTrackObjectNode, isWaterNode, trackNodeRole } from './model-frame.js';
+import { stepWater, waterOffset } from './gadget-animation.js';
 import { clearYUpConversion } from './scene-root.js';
 
 export const TRACK_MODEL_URL = 'models/track.glb';
@@ -61,6 +62,10 @@ export class TrackView {
   readonly object = new THREE.Group();
 
   private drawn = 0;
+  /** `cDirection`: the water's shared phase, 8 degrees a frame (`PLAY.ls:52`). */
+  private waterPhase = 0;
+  private readonly water: { node: THREE.Object3D; restX: number }[] = [];
+  private sky: THREE.Object3D | null = null;
   private hidden = 0;
   private uprighted = false;
 
@@ -70,6 +75,30 @@ export class TrackView {
     const { drawn, hidden } = applyTrackVisibility(scene);
     this.drawn = drawn;
     this.hidden = hidden;
+
+    const root = scene.getObjectByName('SceneRoot') ?? scene;
+    for (const node of root.children) {
+      if (isWaterNode(node.name)) this.water.push({ node, restX: node.position.x });
+      if (isSkyNode(node.name)) this.sky = node;
+    }
+  }
+
+  /**
+   * Advance the scenery that moves.
+   *
+   * The water planes slide along X by `sin(cDirection)` while the phase
+   * advances 8 degrees a frame (`PLAY.ls:48-55`) - one unit either way, a
+   * 45-frame cycle, shared by all nine. They carry no physics: `PREP:315`
+   * gives them no rigid body, no collision modifier and no segment array, so
+   * being in water comes from the road's own surface id, not from these.
+   *
+   * The skydome follows the camera (`doCamera:56`) so it never recedes.
+   */
+  update(cameraPosition: { x: number; y: number; z: number }): void {
+    this.waterPhase = stepWater(this.waterPhase);
+    const slosh = waterOffset(this.waterPhase);
+    for (const { node, restX } of this.water) node.position.x = restX + slosh;
+    this.sky?.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z);
   }
 
   static async load(url = TRACK_MODEL_URL): Promise<TrackView> {
