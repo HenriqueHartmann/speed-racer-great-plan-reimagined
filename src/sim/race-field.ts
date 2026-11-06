@@ -18,6 +18,7 @@
 import * as K from './constants.js';
 import { Rng, substream } from './rng.js';
 import { bearingDeg } from './rival-steering.js';
+import { applyImpact, type Impact } from './rival-damage.js';
 import { waypoint, type TrackPath } from './track-path.js';
 import {
   createRivalState,
@@ -60,6 +61,8 @@ export class RaceField {
   enemiesRemaining = K.RIVAL_FIELD_SIZE;
   /** `enemiesFinished`. A car that runs off the end of the line. */
   enemiesFinished = 0;
+  /** What the player has earned from wrecking rivals, at 1000 each. */
+  killScore = 0;
 
   private tick = 0;
 
@@ -180,11 +183,17 @@ export class RaceField {
     const lost = offset < -K.RIVAL_RECYCLE_BEHIND
       || rival.body.position.z < K.RIVAL_RECYCLE_FLOOR_Z;
     if (!lost) return;
+    this.recycle(rival, player);
+  }
 
+  /** `doJump`. The teleport itself, reached from a fall or from a wreck. */
+  private recycle(rival: RivalRuntime, player: Vec3): void {
+    void player;
     // `doJump:237-240`: a car recycled while still ahead counts as passed.
     if (!rival.behind) this.position = Math.max(1, this.position - 1);
 
     rival.state.damage = 0;
+    rival.state.mode = 'none';
     rival.state.control = 'driving';
     rival.smart = true;
     rival.smartUntil = 0;
@@ -205,6 +214,33 @@ export class RaceField {
     this.rejoin(rival, rejoinAt);
     rival.behind = false;
     this.enemiesRemaining -= 1;
+  }
+
+  /**
+   * Hurt one rival, and recycle it if that finished it.
+   *
+   * `doEnemy:161-234` decides how much; `rival-damage.ts` holds the table and
+   * the one substituted quantity. Destroying a rival is worth 1000 to the
+   * player (`doEnemy:652`) and then recycles the car, which is the same
+   * `doJump` the fall path uses.
+   */
+  hit(rival: RivalRuntime, impact: Omit<Impact, 'spun'>, player: Vec3): void {
+    if (!rival.state.alive) return;
+
+    const spun = rival.state.control === 'spun';
+    const before = rival.state.mode;
+    const after = applyImpact(rival.state.damage, rival.state.mode, { ...impact, spun });
+    rival.state.damage = after.damage;
+    rival.state.mode = after.mode;
+
+    // `doEnemy:190`: being rear-ended also takes the car off the rubber band's
+    // top setting until it is recycled.
+    if (impact.source === 'rival' && impact.inFront) rival.smart = false;
+
+    if (after.mode === 'destroyed' && before !== 'destroyed') {
+      this.killScore += K.RIVAL_KILL_SCORE;
+      this.recycle(rival, player);
+    }
   }
 
   /** `doJump:279-302`: drop onto the road at the rejoin point, facing the next. */

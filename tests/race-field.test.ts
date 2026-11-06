@@ -270,3 +270,81 @@ describe('RaceField', () => {
     expect(run()).toEqual(run());
   });
 });
+
+describe('RaceField damage', () => {
+  it('scores the player 1000 for a wreck, once', () => {
+    const { f, bodies } = field();
+    bodies.forEach((b) => (b.position = vec3(0, 1000, 0)));
+    tick(f, 900);
+
+    // 15 a hit, so the seventh is the one that finishes it.
+    const r = f.rivals[0]!;
+    for (let i = 0; i < 6; i++) {
+      f.hit(r, { source: 'playerBlades', force: 0 }, vec3(0, 900, 0));
+    }
+    expect(f.killScore).toBe(0);
+    expect(r.state.damage).toBe(90);
+
+    f.hit(r, { source: 'playerBlades', force: 0 }, vec3(0, 900, 0));
+    expect(f.killScore).toBe(K.RIVAL_KILL_SCORE);
+
+    // And the wreck recycled it, so the next hit starts a fresh car's pool
+    // rather than scoring again.
+    f.hit(r, { source: 'playerBlades', force: 0 }, vec3(0, 900, 0));
+    expect(f.killScore).toBe(K.RIVAL_KILL_SCORE);
+    expect(r.state.damage).toBe(15);
+  });
+
+  it('recycles the car it just wrecked rather than leaving a hulk', () => {
+    const { f, bodies } = field();
+    bodies.forEach((b) => (b.position = vec3(0, 1000, 0)));
+    tick(f, 900);
+    const remaining = f.enemiesRemaining;
+
+    const r = f.rivals[0]!;
+    for (let i = 0; i < 7; i++) {
+      f.hit(r, { source: 'playerBlades', force: 0 }, vec3(0, 900, 0));
+    }
+
+    expect(f.enemiesRemaining).toBe(remaining - 1);
+    expect(r.state.damage).toBe(0);
+    expect(r.state.mode).toBe('none');
+    expect(r.state.alive).toBe(true);
+  });
+
+  it('takes a rear-ended rival off the top of the rubber band', () => {
+    // `doEnemy:190`: `pSmartEnemy = 0`, and it stays off until a recycle.
+    const { f, bodies } = field();
+    bodies.forEach((b) => (b.position = vec3(0, 1000, 0)));
+    tick(f, 900);
+    const r = f.rivals[0]!;
+    expect(r.smart).toBe(true);
+
+    f.hit(r, { source: 'rival', force: 4, inFront: true }, vec3(0, 900, 0));
+    expect(r.smart).toBe(false);
+
+    tick(f, 900);
+    expect(r.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.RIVAL_SPEED_MIN, 6);
+  });
+
+  it('lets the Robot finish a rival with one nudge afterwards', () => {
+    const { f, bodies } = field();
+    bodies.forEach((b) => (b.position = vec3(0, 1000, 0)));
+    tick(f, 900);
+    const r = f.rivals[0]!;
+    r.state.control = 'spun';
+
+    f.hit(r, { source: 'player', force: 0 }, vec3(0, 900, 0));
+
+    expect(f.killScore).toBe(K.RIVAL_KILL_SCORE);
+  });
+
+  it('ignores damage aimed at a car that has already left', () => {
+    const { f } = field();
+    const r = f.rivals[0]!;
+    r.state.alive = false;
+    f.hit(r, { source: 'playerBlades', force: 0 }, vec3(0, 900, 0));
+    expect(r.state.damage).toBe(0);
+    expect(f.killScore).toBe(0);
+  });
+});

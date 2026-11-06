@@ -14,6 +14,7 @@
  */
 
 import * as K from './constants.js';
+import type { ExplosionMode } from './rival-damage.js';
 import { bearingDeg, wrapAngleDeg } from './rival-steering.js';
 import { waypoint, type TrackPath } from './track-path.js';
 import {
@@ -52,6 +53,8 @@ export interface RivalState {
   maxSpeed: number;
   /** `pCarBody.userData.damage`, 0..100. */
   damage: number;
+  /** `explosionMODE`, reduced to the three values that gate behaviour. */
+  mode: ExplosionMode;
   /** False once it has finished, exploded or been taken out of the world. */
   alive: boolean;
 }
@@ -63,6 +66,7 @@ export function createRivalState(startStep: number): RivalState {
     control: 'driving',
     maxSpeed: K.MAX_SPEED * K.RIVAL_BASE_SPEED_FACTOR,
     damage: 0,
+    mode: 'none',
     alive: true,
   };
 }

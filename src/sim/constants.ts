@@ -623,3 +623,37 @@ export const RIVAL_SPEED_MIN = 0.6;
 export const RIVAL_SMART_WINDOW_BASE_TICKS = 100;
 export const RIVAL_SMART_WINDOW_SPREAD_TICKS = 100;
 export const DIRECTOR_TICKS_PER_SECOND = 60;
+
+/** RECOVERED - `doEnemy:190`: a rear-ended car takes half the collision force. */
+export const RIVAL_REAR_END_FACTOR = 0.5;
+
+/** RECOVERED - `doEnemy:205`: the Mach 5's saw. */
+export const RIVAL_DAMAGE_FROM_BLADES = 15;
+
+/** RECOVERED - `doEnemy:213`: the Mach 5's bodywork, six times gentler. */
+export const RIVAL_DAMAGE_FROM_PLAYER = 2.5;
+
+/** RECOVERED - `doEnemy:226`: above this, a wall or a tree is simply fatal. */
+export const RIVAL_SCENERY_FORCE = 10;
+
+/** RECOVERED - `doEnemy:196`: smoke starts here, out of 100. */
+export const RIVAL_SMOKE_DAMAGE = 30;
+
+/** RECOVERED - `doEnemy:227`: scenery can only kill once a second. */
+export const RIVAL_SCENERY_DEBOUNCE = 1;
+
+/** RECOVERED - `doEnemy:652`: destroying a rival is worth this to the player. */
+export const RIVAL_KILL_SCORE = 1000;
+
+/**
+ * SUBSTITUTE - closing speed to the original's `hitforce`.
+ *
+ * `hitforce` is `collisionDetails[5]`, Havok's collision magnitude in Havok's
+ * units, and this project has no conversion to it: see `rival-damage.ts` for
+ * the calibration and for what stays uncertain. One tenth puts a slow nudge
+ * at 1, the player's top speed at 6.9 and a full head-on at 13.8, which
+ * straddles the recovered scenery threshold of 10 in the right places.
+ *
+ * The original's `hitforce` itself remains UNRESOLVED. This is not it.
+ */
+export const IMPACT_FORCE_SCALE = 0.1;
