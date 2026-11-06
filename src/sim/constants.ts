@@ -346,6 +346,39 @@ export const RIGHTING_PITCH_DEG = 80;
 export const RIGHTING_ROLL_DEG = 45;
 
 /**
+ * SUBSTITUTE - the angle from which the corrector actually pushes, which is
+ * the damping's threshold rather than its own.
+ *
+ * Two recovered rules leave a gap between them, and our substitute for the
+ * third one makes that gap bite. `doMach5:797` cuts angular velocity to a
+ * tenth every tick beyond 30 degrees on either axis; `doMach5:784` engages
+ * the corrector only beyond 80 in pitch or 45 in roll. Between 30 and 80 in
+ * pitch, then, the car is braked hard and nothing pushes it back.
+ *
+ * In the original that band is covered by a Havok dashpot - a constraint,
+ * solved inside the step, that keeps driving the body while it exists. Ours
+ * is a one-tick impulse, which is a far weaker thing, so the same gap that
+ * the original could absorb leaves our car stranded.
+ *
+ * Measured on the real course, from rest at each attitude, ticks until the
+ * car is level with all four wheels down:
+ *
+ *                    80/45 trigger      30 trigger
+ *   nose down 90        22.07 s            1.80 s
+ *   nose down 75        16.53 s            1.50 s
+ *   on its side 90       3.00 s            0.93 s
+ *   upside down          0.20 s            0.20 s
+ *
+ * The 22 seconds is what play reported as the car planting itself on its
+ * nose and coming back "very slowly". Correcting over exactly the band the
+ * damping covers is the smallest change that closes it, and it leaves both
+ * recovered numbers in place above - they still say where the ORIGINAL's
+ * dashpot would have been created, which is a different fact from where our
+ * impulse has to act.
+ */
+export const RIGHTING_ENGAGE_DEG = 30;
+
+/**
  * SUBSTITUTE - how hard the corrector pushes the car back onto its wheels.
  *
  * The original uses a Havok angular dashpot, `makeAngularDashpot

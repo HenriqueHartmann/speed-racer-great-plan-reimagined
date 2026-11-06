@@ -18,6 +18,10 @@ import { initRapier, RapierWorld, RapierChassis } from '../src/physics/rapier-bo
 import { World } from '../src/sim/world.js';
 import { FlatGround } from '../src/sim/analytic-body.js';
 import { NO_INPUT, vec3 } from '../src/sim/vehicle.js';
+import { readFileSync } from 'node:fs';
+import { SegmentColliders } from '../src/physics/segment-colliders.js';
+import { parseGroundMesh } from '../src/sim/ground-mesh.js';
+import { Track, segmentIndexFor } from '../src/sim/track.js';
 import * as K from '../src/sim/constants.js';
 
 let rapier: Awaited<ReturnType<typeof initRapier>>;
@@ -80,5 +84,70 @@ describe('self-righting', () => {
     const before = chassis.rollDeg;
     world.step(NO_INPUT);
     expect(Math.abs(chassis.rollDeg - before)).toBeLessThan(5);
+  });
+});
+
+describe('righting from a nose-stand', () => {
+  /**
+   * The case play reported: the car plants itself on its nose and comes back
+   * "very slowly". It took 22 seconds.
+   *
+   * The cause was a gap between two recovered rules. `doMach5:797` cuts
+   * angular velocity to a tenth every tick beyond 30 degrees; `doMach5:784`
+   * engages the corrector only beyond 80 in pitch. Between the two the car
+   * was braked hard with nothing pushing it back, and only gravity brought it
+   * down. See `RIGHTING_ENGAGE_DEG`.
+   */
+  function tipAndTime(quat: { x: number; y: number; z: number; w: number }): number {
+    const ground = parseGroundMesh(readFileSync('public/models/track-ground.bin'));
+    const track = new Track({ ground });
+    const host = new RapierWorld(rapier);
+    const colliders = new SegmentColliders(host, ground);
+    colliders.setActive(segmentIndexFor(ground.spawn.y));
+    const road = track.castDown(vec3(ground.spawn.x, ground.spawn.y, ground.spawn.z), 60);
+    const z = road ? ground.spawn.z - road.distance : ground.spawn.z;
+    const chassis = new RapierChassis(rapier, host, vec3(ground.spawn.x, ground.spawn.y, z + 2));
+    chassis.setRotation(quat);
+    const world = new World({
+      seed: 1, body: chassis, probe: track, track, stepPhysics: () => host.step(),
+    });
+    for (let tick = 0; tick < 2000; tick++) {
+      world.step(NO_INPUT);
+      colliders.setActive(segmentIndexFor(chassis.position.y));
+      if (Math.abs(chassis.pitchDeg) < 15 && Math.abs(chassis.rollDeg) < 15
+        && world.vehicle.powerCoeff >= 1) {
+        return tick;
+      }
+    }
+    return -1;
+  }
+
+  const aboutX = (deg: number) => {
+    const half = (deg * Math.PI) / 360;
+    return { x: Math.sin(half), y: 0, z: 0, w: Math.cos(half) };
+  };
+  const aboutY = (deg: number) => {
+    const half = (deg * Math.PI) / 360;
+    return { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) };
+  };
+
+  it('comes off its nose in a couple of seconds, not twenty', () => {
+    const ticks = tipAndTime(aboutX(90));
+    expect(ticks).toBeGreaterThan(0);
+    expect(ticks * K.TICK_DT).toBeLessThan(3);
+  });
+
+  it('comes back from the middle of the band the damping covers', () => {
+    // 75 degrees is below the original dashpot's 80 and well above the
+    // damping's 30 - the dead band, and where the car used to strand.
+    const ticks = tipAndTime(aboutX(75));
+    expect(ticks).toBeGreaterThan(0);
+    expect(ticks * K.TICK_DT).toBeLessThan(3);
+  });
+
+  it('still comes off its side at least as fast as it ever did', () => {
+    const ticks = tipAndTime(aboutY(90));
+    expect(ticks).toBeGreaterThan(0);
+    expect(ticks * K.TICK_DT).toBeLessThan(3);
   });
 });

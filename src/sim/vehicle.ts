@@ -444,7 +444,11 @@ export function updateSelfRighting(state: VehicleState, body: ChassisBody): void
   //
   // The trigger and the strength scaling are the original's. What the torque
   // drives toward is ours: see RIGHTING_TORQUE.
-  if (pitch > K.RIGHTING_PITCH_DEG || roll > K.RIGHTING_ROLL_DEG) {
+  // Over the band the damping covers, not the narrower one the original's
+  // dashpot was created in. See RIGHTING_ENGAGE_DEG: between 30 and 80
+  // degrees of pitch the velocity cut above fires and nothing pushed back,
+  // which left the car planted on its nose for twenty-two seconds.
+  if (pitch > K.RIGHTING_ENGAGE_DEG || roll > K.RIGHTING_ENGAGE_DEG) {
     const strength = (Math.max(pitch, roll) / 90) * body.mass * K.RIGHTING_TORQUE;
     // The axis that turns the car's own up vector back onto the world's:
     // up x (0,0,1), which is zero exactly when it is already level.
