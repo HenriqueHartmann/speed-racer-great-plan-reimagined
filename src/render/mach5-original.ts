@@ -81,7 +81,6 @@ export class OriginalMach5 implements VehicleView {
   /** `scopeFactor` and `scopeRotate` from `doCamera`. */
   private scopeFactor = SCOPE_REST;
   private scopeSpin = 0;
-  private bladeMaterialCloned = false;
   /** The collider hull's centre of mass - the chassis origin we integrate about. */
   private centerOfMass: Vec3Like = { x: 0, y: 0, z: 0 };
   private loaded = false;
@@ -303,27 +302,23 @@ export class OriginalMach5 implements VehicleView {
   }
 
   /**
-   * The texture the original spins: `shaderList[3]`, the third primitive.
+   * The spinning texture, shared by both saws.
    *
-   * glTF gives a multi-primitive node a `Group` of meshes in order, so the
-   * third is index 2. Its material is cloned the first time, because the
-   * loader shares one material instance across the saw's other `blades`
-   * primitive and the original turns only this one.
+   * The original turns `shaderList[3]`'s `textureTransform` and nothing else
+   * (`doMach5:592-594`), which reads as a single slot. It is not: the saw's
+   * two `blades` primitives, the first and the third, carry **the same
+   * material** - index 7 in the decoded file - so the loader hands back one
+   * instance for both and turning it turns both blades.
+   *
+   * A first version of this cloned the material so as to touch only the third
+   * primitive, faithfully to the line. That left the right-hand saw standing
+   * still, which play caught immediately.
    */
   private bladeTexture(saw: THREE.Object3D): THREE.Texture | null {
     const mesh = saw.children[2] as THREE.Mesh | undefined;
     if (!mesh?.isMesh) return null;
     const material = mesh.material as THREE.MeshStandardMaterial;
-    if (!material.map) return null;
-    if (!this.bladeMaterialCloned) {
-      const clone = material.clone();
-      clone.map = material.map.clone();
-      clone.map.needsUpdate = true;
-      mesh.material = clone;
-      this.bladeMaterialCloned = true;
-      return clone.map;
-    }
-    return material.map;
+    return material.map ?? null;
   }
 
   /**
