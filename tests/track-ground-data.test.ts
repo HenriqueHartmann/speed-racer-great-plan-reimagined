@@ -7,7 +7,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { parseGroundMesh } from '../src/sim/ground-mesh.js';
+import { parseGroundMesh, castDownMesh } from '../src/sim/ground-mesh.js';
+import { vec3 } from '../src/sim/vehicle.js';
 import { Glb } from './glb.js';
 
 const FILE = 'public/models/track-ground.bin';
@@ -198,5 +199,90 @@ describe('parseGroundMesh refuses a file it cannot trust', () => {
     expect(() =>
       parseGroundMesh(corrupt((_, v) => v.setUint32(32 + 36 + 12 + 4 + 4, 0, true))),
     ).toThrow(/segment/i);
+  });
+});
+
+describe('the near-parallel guard, against the real mesh', () => {
+  /**
+   * One ray per segment, frozen.
+   *
+   * The guard that rejects a near-parallel triangle sits in the hot loop and
+   * is a candidate for algebraic rewriting. This pins every segment's answer -
+   * distance to seventeen digits and surface id - so a rewrite is proved
+   * equivalent on the shipped geometry, not only on constructed slivers.
+   *
+   * Captured from the implementation at 2e344eb. A change here is a change to
+   * what the car drives on, and must be justified, not re-captured.
+   */
+  const FROZEN: readonly (readonly [number, number | null, number | null])[] = [
+  [1, 0.50000000000000000, 2],
+  [2, null, null],
+  [3, 7.0260557750441723, 6],
+  [4, 21.965680852295016, 6],
+  [5, 5.4045300150551201, 6],
+  [6, 13.312832469927216, 6],
+  [7, null, null],
+  [8, null, null],
+  [9, 14.178070020287066, 6],
+  [10, 14.731844103904550, 6],
+  [11, 2.2641178138149742, 6],
+  [12, 25.576116539940426, 5],
+  [13, 24.848136259535437, 12],
+  [14, 1.0309401176159998, 6],
+  [15, 21.991922138640309, 12],
+  [16, 22.019590743745223, 12],
+  [17, null, null],
+  [18, 5.2215633392333984, 10],
+  [19, 5.2208080291748047, 11],
+  [20, null, null],
+  [21, 0.50000000000000000, 10],
+  [22, 6.1720790863037109, 10],
+  [23, null, null],
+  [24, null, null],
+  [25, 0.50000000000000000, 7],
+  [26, 0.50000000000000000, 6],
+  [27, 31.387912072732696, 5],
+  [28, 26.202048640315624, 12],
+  [29, 4.7879087081072980, 6],
+  [30, 22.526744067169531, 12],
+  [31, 22.530839920043949, 12],
+  [32, 18.086314572816466, 6],
+  [33, 12.075196721759536, 6],
+  [34, 6.4795913696289063, 6],
+  [35, 2.0723325114751634, 6],
+  [36, 6.5802519514670106, 6],
+  [37, 2.2786554430030801, 3],
+  ];
+
+  it('answers identically on all 37 segments', () => {
+    const g = parseGroundMesh(readFileSync(FILE));
+    expect(FROZEN.length).toBe(g.segmentCount);
+
+    for (const [segment, distance, effectId] of FROZEN) {
+      const a = g.segmentStart[segment - 1]!;
+      const b = g.segmentEnd[segment - 1]!;
+
+      // The probe point is reproducible from the mesh alone: the centroid of
+      // the segment's first 400 triangles, half a unit above its highest vertex.
+      let sx = 0, sy = 0, maxz = -Infinity, n = 0;
+      for (let t = a; t < Math.min(b, a + 400); t++) {
+        for (let k = 0; k < 3; k++) {
+          const i = g.indices[t * 3 + k]! * 3;
+          sx += g.positions[i]!;
+          sy += g.positions[i + 1]!;
+          maxz = Math.max(maxz, g.positions[i + 2]!);
+          n++;
+        }
+      }
+
+      const hit = castDownMesh(g, vec3(sx / n, sy / n, maxz + 0.5), 60, a, b);
+      if (distance === null) {
+        expect(hit, `segment ${segment}`).toBeNull();
+        continue;
+      }
+      expect(hit, `segment ${segment}`).not.toBeNull();
+      expect(hit!.distance, `segment ${segment} distance`).toBe(distance);
+      expect(hit!.effectId, `segment ${segment} surface`).toBe(effectId);
+    }
   });
 });

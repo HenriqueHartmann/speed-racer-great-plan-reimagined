@@ -131,6 +131,49 @@ describe('castDownMesh', () => {
     }
   });
 
+  it('sets the near-parallel threshold at the ratio the epsilon names', () => {
+    // The guard is `|det| > EPS_REL * |e1| * |e2|` with EPS_REL = 1e-7, and
+    // `det` is the 2D cross product of the two edges projected onto XY. So the
+    // quantity being thresholded is a RATIO - how edge-on the triangle is seen
+    // from above - and the epsilon is the ratio's floor, not the determinant's.
+    //
+    // Nothing pinned that before. The existing near-vertical test asserts only
+    // that a hit, if one comes back, is finite. This fixes the threshold on
+    // both sides of 1e-7, which is what any rewrite of the guard has to keep.
+    //
+    // A sliver with a = (0,0,-1), e1 = (1,0,0), e2 = (1,d,0): det = d and both
+    // edges are of length about 1, so the ratio IS d. A ray dropped through
+    // the sliver's interior - barycentric u = 0.5, v = 0.25 - must hit when d
+    // is above the epsilon and be refused when it is below.
+    const sliver = (d: number): readonly (readonly number[])[] => [
+      [0, 0, -1, 1, 0, -1, 1, d, -1],
+    ];
+    const through = (d: number) => vec3(0.75, 0.25 * d, 0);
+
+    // Comfortably above 1e-7: a real, if thin, triangle. It must be hit.
+    const wide = castDownMesh(mesh(sliver(1e-5), [1]), through(1e-5), 10, 0, 1);
+    expect(wide, 'ratio 1e-5 is above the epsilon and must be hit').not.toBeNull();
+    expect(wide!.distance).toBeCloseTo(1, 6);
+
+    // Comfortably below it: refused rather than divided by.
+    expect(castDownMesh(mesh(sliver(1e-9), [1]), through(1e-9), 10, 0, 1)).toBeNull();
+  });
+
+  it('judges a triangle by its shape, not by its size', () => {
+    // The `* |e1| * |e2|` is what makes the epsilon scale-free. The same sliver
+    // blown up by a thousand is the same shape and must get the same answer,
+    // which a guard comparing the bare determinant would not give.
+    const sliver = (d: number, k: number): readonly (readonly number[])[] => [
+      [0, 0, -k, k, 0, -k, k, d * k, -k],
+    ];
+    for (const k of [1, 1000]) {
+      const hit = castDownMesh(mesh(sliver(1e-5, k), [1]), vec3(0.75 * k, 0.25e-5 * k, 0), 1e5, 0, 1);
+      expect(hit, `k=${k} must be hit`).not.toBeNull();
+      expect(castDownMesh(mesh(sliver(1e-9, k), [1]), vec3(0.75 * k, 0.25e-9 * k, 0), 1e5, 0, 1),
+        `k=${k} must be refused`).toBeNull();
+    }
+  });
+
   it('only tests the triangles in the given range', () => {
     // The range is how the caller restricts a query to one segment, as the
     // original restricted modelsUnderRay with #modelList.
