@@ -19,12 +19,16 @@
 import type * as RAPIER from '@dimforge/rapier3d-compat';
 import type { Prop, Track } from '../sim/track.js';
 import type { RapierWorld } from './rapier-body.js';
+import { trackGroups, vehicleBit } from './interaction-groups.js';
 
 export class PropColliders {
   private readonly colliders = new Map<number, RAPIER.Collider>();
   private readonly ownerSegment = new Map<number, number>();
   private readonly props = new Map<number, Prop>();
-  private active = 0;
+  /** Per prop, the bits of the vehicles it is currently tangible to. */
+  private readonly masks = new Map<number, number>();
+  /** Per vehicle, the segment whose solids are tangible to it. */
+  private readonly active = new Map<number, number>();
 
   constructor(host: RapierWorld, track: Track) {
     for (const segment of track.segments) {
@@ -33,7 +37,9 @@ export class PropColliders {
         // collision modifier and no rigid body at all.
         if (prop.kind === 'pickup') continue;
         const collider = host.addStaticBox(prop.position, prop.halfExtent);
-        collider.setEnabled(false);
+        // Tangible to nobody yet. As with the segment meshes, solidity is a
+        // filter from here on and the collider is never switched off.
+        collider.setCollisionGroups(trackGroups(0));
         this.colliders.set(prop.id, collider);
         this.ownerSegment.set(prop.id, segment.index);
         this.props.set(prop.id, prop);
@@ -41,12 +47,10 @@ export class PropColliders {
     }
   }
 
-  /** Make `segmentIndex`'s solids the only tangible ones. */
-  setActive(segmentIndex: number): void {
-    this.active = segmentIndex;
-    for (const [id, collider] of this.colliders) {
-      collider.setEnabled(this.shouldBeSolid(id));
-    }
+  /** Make `segmentIndex`'s solids the only ones tangible to `vehicle`. */
+  setActive(segmentIndex: number, vehicle = 0): void {
+    this.active.set(vehicle, segmentIndex);
+    this.refresh();
   }
 
   /**
@@ -56,19 +60,31 @@ export class PropColliders {
    * something may have been taken, not every frame for every prop.
    */
   sync(): void {
-    this.setActive(this.active);
+    this.refresh();
   }
 
   has(propId: number): boolean {
     return this.colliders.has(propId);
   }
 
-  /** The props that can currently stop the car, in a stable order. */
-  enabledIds(): number[] {
-    return [...this.colliders.keys()].filter((id) => this.colliders.get(id)!.isEnabled());
+  /** The props that can currently stop that vehicle, in a stable order. */
+  enabledIds(vehicle = 0): number[] {
+    const bit = vehicleBit(vehicle);
+    return [...this.colliders.keys()].filter((id) => (this.masks.get(id)! & bit) !== 0);
   }
 
-  private shouldBeSolid(id: number): boolean {
-    return this.ownerSegment.get(id) === this.active && this.props.get(id)!.active;
+  /** Rewrite every prop's filter from the per-vehicle active segments. */
+  private refresh(): void {
+    for (const [id, collider] of this.colliders) {
+      let mask = 0;
+      if (this.props.get(id)!.active) {
+        const owner = this.ownerSegment.get(id)!;
+        for (const [vehicle, segment] of this.active) {
+          if (segment === owner) mask |= vehicleBit(vehicle);
+        }
+      }
+      this.masks.set(id, mask);
+      collider.setCollisionGroups(trackGroups(mask));
+    }
   }
 }

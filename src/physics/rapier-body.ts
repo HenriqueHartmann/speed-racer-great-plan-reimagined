@@ -13,6 +13,7 @@
 
 import type RAPIER from '@dimforge/rapier3d-compat';
 import * as K from '../sim/constants.js';
+import { vehicleGroups } from './interaction-groups.js';
 import { vec3, type ChassisBody, type GroundHit, type GroundProbe, type Vec3 } from '../sim/vehicle.js';
 
 type R = typeof RAPIER;
@@ -158,6 +159,14 @@ export class RapierChassis implements ChassisBody {
     host: RapierWorld,
     position: Vec3 = vec3(0, 0, K.SPAWN_HEIGHT),
     mass = K.CHASSIS_MASS,
+    /**
+     * Which vehicle this is, for collision filtering. The player is 0.
+     *
+     * The track is solid per vehicle, not globally - see
+     * `interaction-groups.ts`. A chassis left on Rapier's default groups would
+     * collide with every segment any vehicle happened to be in.
+     */
+    private readonly vehicleIndex = 0,
   ) {
     this.mass = mass;
 
@@ -191,6 +200,7 @@ export class RapierChassis implements ChassisBody {
     const collider = rapier.ColliderDesc.cuboid(half.x, half.y, half.z)
       .setFriction(K.CHASSIS_FRICTION)
       .setRestitution(K.CHASSIS_RESTITUTION)
+      .setCollisionGroups(vehicleGroups(this.vehicleIndex))
       .setMassProperties(mass, { x: 0, y: 0, z: 0 }, inertia, {
         x: 0,
         y: 0,
