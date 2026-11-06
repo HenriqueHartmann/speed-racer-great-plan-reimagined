@@ -54,14 +54,14 @@ Four payloads begin with the signature `3DEM` followed by `IFX `.
 
 | Movie | Resource ID | Payload bytes | Interpretation |
 |---|---:|---:|---|
-| `SR_level_1.dcr` | 7587 | 2552084 | **The level** — VERIFIED, 760 meshes: 37 road segments, 355 trees, 209 path waypoints, 68 pickups, 25 walls, 22 invisible colliders |
+| `SR_level_1.dcr` | 7587 | 2552084 | **The level** — VERIFIED, 760 meshes: 37 road segments, 355 trees, 209 path waypoints, 77 pickups, 25 walls, 23 scenery, 22 invisible colliders, 9 water, 1 rail, 1 skydome |
 | `SR_level_1.dcr` | 7589 | 206268 | **The Mach 5** — VERIFIED, 20 models matching `doMach5`'s properties one for one |
 | `SR_level_1.dcr` | 7591 | 104584 | The rival car — 9 models (INFERRED from the node names) |
 | `SR_MAIN.dcr` | 5143 | 200236 | Front-end showcase car (INFERRED) |
 
 `3DEM` is the Director Shockwave-3D cast-member stream; `IFX ` is Intel's Interactive-FX container.
 
-**Extracted so far:**
+**Extracted so far** — the whole level but its racing line:
 
 - Resource 7589, the Mach 5, as `public/models/mach5.glb` — 20 meshes, 46 primitives, 4,454
   triangles, 5,194 vertices, 10 materials over 6 textures.
@@ -69,7 +69,13 @@ Four payloads begin with the signature `3DEM` followed by `IFX `.
   materials over 29 textures — and `public/models/track-ground.bin`, the 37 `SEG_1`…`SEG_37` road
   meshes reduced to 20,276 triangles of plain typed arrays, which is what the simulation drives on.
 
-`tools/extract_mesh.sh` regenerates both from the original artifact;
+- `public/models/track-solids.bin` — the 48 barriers (`WALL_`, `INV_`, `RAIL_`) as per-segment
+  trimeshes, 8,156 triangles. `MISC_` is deliberately absent: `PREP`'s dispatcher has no branch
+  for it, so those 23 models are scenery and are drawn but never solid.
+- `public/models/track-objects.bin` — 432 individual objects, 355 trees and 77 pickups, filed by
+  position with their measured half-extents and the rotation the 68 turned trees carry.
+
+`tools/extract_mesh.sh` regenerates all of them from the original artifact;
 `docs/research/w3d-format.md` documents the format and the decoder, and
 `docs/design/2026-11-05-original-track.md` the track's own structure.
 
@@ -233,7 +239,7 @@ decision — see `docs/research/project-brief.md` for the asset policy.
 - No sound decoded.
 - No FLV frame decoded.
 - The rival car (7591) and the showcase car (5143) decode but have not been imported.
-- Of the track world, only the 37 road segments. Trees, walls, water, pickups and the invisible
-  `INV_` colliders carry gameplay rules and arrive in their own step.
+- Of the track world, the 209 `path_` waypoints: the rival racing line, decoded and waiting for
+  the AI that reads it.
 
 **Next step:** the props, checked against `PREP` one kind at a time.

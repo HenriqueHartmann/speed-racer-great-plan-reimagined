@@ -51,9 +51,13 @@ starts at. `tools/extract_mesh.sh` regenerates both from the artifact;
 `docs/research/w3d-format.md` documents the format and the decoder, and
 `docs/design/2026-11-05-original-track.md` the track.
 
-The scenery is not in yet: trees, walls, water and pickups carry gameplay rules and arrive in
-their own step. Drive off the road and the run ends, which is the original's own rule finally
-reachable on geometry that has somewhere to fall.
+**The level is in**, too: its walls and invisible fences hold you on the road, its 355 trees and
+77 pickups are where the original put them, and its water drowns you. Damage, score, repair and
+oxygen all fire on the real course — they had been implemented and unreachable, because there was
+nothing to hit and nothing to collect.
+
+What is still missing is the rival AI. The 209-point racing line came decoded with the track and
+is waiting for it.
 
 ---
 

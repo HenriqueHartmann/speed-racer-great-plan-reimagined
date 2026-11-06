@@ -1,10 +1,12 @@
 /**
  * The original track, drawn.
  *
- * `public/models/track.glb` is the whole decoded world - 760 meshes - and only
- * the 37 road segments are drawn here. The rest is scenery, props, invisible
- * colliders and positioning nodes, and it arrives in its own step where each
- * can be checked against `PREP`'s visibility pass. See `isDrawnTrackNode`.
+ * `public/models/track.glb` is the whole decoded world - 760 meshes - and
+ * `trackNodeRole` decides which of them are seen. Most are: the road, the
+ * walls, the rail, the scenery, the trees, the pickups, the water and the sky.
+ * What stays hidden is what `PREP` hides or never draws - the `INV_` fences,
+ * which are solid and unseen - and the nodes that are coordinates rather than
+ * art: `carPos_Mach5` and the 209 `path_` waypoints of the rival racing line.
  *
  * The geometry the car actually drives on is not this: the simulation reads
  * `track-ground.bin`, built from the same meshes by `tools/build_track_ground.mjs`.

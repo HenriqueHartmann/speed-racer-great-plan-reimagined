@@ -172,6 +172,26 @@ describe('parseGroundMesh refuses a file it cannot trust', () => {
     expect(() => parseGroundMesh(corrupt((_, v) => v.setFloat32(32, NaN, true)))).toThrow(/finite/i);
   });
 
+  it('rejects a surface id of zero', () => {
+    // Nothing downstream would notice: `surfaceFor` falls through to the
+    // default and the car drives on an invented surface.
+    // The synthetic file has three vertices and one triangle, so its single
+    // surface id sits at 32 + 36 + 12.
+    expect(() => parseGroundMesh(corrupt((b) => void (b[80] = 0)))).toThrow(/surface id/i);
+  });
+
+  it('reads a buffer that does not start on a four-byte boundary', () => {
+    // The typed arrays are views onto the caller's buffer and a Float32Array
+    // cannot start on an odd byte. An unaligned input used to throw a raw
+    // RangeError from the constructor rather than this module's own error.
+    const file = readFileSync(FILE);
+    const padded = new Uint8Array(file.byteLength + 2);
+    padded.set(file, 2);
+    const unaligned = padded.subarray(2);
+    expect(unaligned.byteOffset % 4).not.toBe(0);
+    expect(parseGroundMesh(unaligned).segmentCount).toBe(37);
+  });
+
   it('rejects segment ranges that are not contiguous and ascending', () => {
     // segmentEnd[0] set to 0 while triangleCount is 1: the last segment no
     // longer accounts for every triangle.

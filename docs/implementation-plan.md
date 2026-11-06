@@ -265,8 +265,9 @@ grip, which earlier research had wrongly recorded as existing solely in `doEnemy
 
 - Playwright smoke test not yet written.
 - Performance not yet measured against a declared workload; no FPS claim is made.
-- The track's scenery is not in: of the level's 760 meshes only the 37 road segments are drawn and
-  driven on. Trees, walls, water, pickups and the invisible colliders carry gameplay rules.
+- Rivals aside, the level is complete: road, barriers, trees, pickups, water and sky. What is not
+  modelled is the faller — `FALLER_NN_TGR` / `_OBJ` have full code paths in `PREP` and not one
+  instance in this level, so `PropKind === 'faller'` has no geometry behind it.
 - Rival AI not yet written: `doEnemy` is decompiled and the 209-point racing line is recovered
   with the track, but nothing drives against the player.
 

@@ -214,6 +214,14 @@ function parseSegmentedMesh(
 ): GroundMesh & { spawn: Vec3 } {
   if (bytes.byteLength < HEADER_BYTES) throw new Error(`${what} truncated: no header`);
 
+  // The typed arrays below are views onto the caller's buffer, and a
+  // Float32Array cannot start on an odd byte. A `Uint8Array` whose own offset
+  // is not a multiple of four would throw a raw RangeError from the
+  // constructor rather than this module's own error, so copy that case rather
+  // than escape our own contract. Both real callers - `fetch` and
+  // `readFileSync` - are aligned, so this almost never fires.
+  if (bytes.byteOffset % 4 !== 0) bytes = bytes.slice();
+
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint32(0, true) !== magic) throw new Error(`${what}: bad magic`);
 
@@ -252,6 +260,9 @@ function parseSegmentedMesh(
     if (indices[i]! >= vertexCount) {
       throw new Error(`${what}: index ${indices[i]} past the ${vertexCount} vertices`);
     }
+  }
+  for (let i = 0; i < surfaceIds.length; i++) {
+    if (surfaceIds[i] === 0) throw new Error(`${what}: triangle ${i} has surface id 0`);
   }
   if (segmentCount === 0 || segmentStart[0] !== 0) {
     throw new Error(`${what}: segment ranges must start at triangle 0`);
