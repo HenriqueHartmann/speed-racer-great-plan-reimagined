@@ -183,13 +183,17 @@ export class RapierChassis implements ChassisBody {
       .setCcdEnabled(true);
     this.body = host.world.createRigidBody(desc);
 
-    const half = vec3(K.TRACK_WIDTH / 2, K.WHEELBASE_FRONT, 0.4);
+    // What the car TOUCHES: the recovered collider hull's bounds about the
+    // centre of mass. What it WEIGHS, below, is computed from different
+    // numbers on purpose - see CHASSIS_INERTIA_HALF_EXTENT.
+    const half = K.CHASSIS_HALF_EXTENT;
 
     // Inertia of a solid cuboid of these dimensions, then scaled. See
-    // CHASSIS_INERTIA_MULTIPLIER for why the scale is there and what it costs.
-    const w = half.x * 2;
-    const l = half.y * 2;
-    const h = half.z * 2;
+    // CHASSIS_INERTIA_MULTIPLIER for why the scale is there and what it costs,
+    // and CHASSIS_INERTIA_HALF_EXTENT for why these are not the collider's.
+    const w = K.CHASSIS_INERTIA_HALF_EXTENT.x * 2;
+    const l = K.CHASSIS_INERTIA_HALF_EXTENT.y * 2;
+    const h = K.CHASSIS_INERTIA_HALF_EXTENT.z * 2;
     const k = (mass / 12) * K.CHASSIS_INERTIA_MULTIPLIER;
     const inertia = {
       x: k * (l * l + h * h),

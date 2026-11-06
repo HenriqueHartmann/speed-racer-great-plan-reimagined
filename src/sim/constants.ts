@@ -705,3 +705,58 @@ export const DUGGARY_MATCH_PERIOD_S = 4;
  * Ported as what it does, not as what it reads like.
  */
 export const DUGGARY_RESET_COOLDOWN_S = 5;
+
+/**
+ * RECOVERED (measured) - the chassis collision box, as half-extents about the
+ * centre of mass.
+ *
+ * The original's collider is a real mesh, `collider` in `Car_Mach5`: 104
+ * vertices, 204 triangles, spanning x -0.871..0.871, y -1.706..1.706 and
+ * z 0..0.311. Its centre of mass is (0, -0.076, 0.156), which is the point
+ * our chassis integrates about, so about that point the hull reaches 0.871,
+ * 1.782 and 0.156.
+ *
+ * The box this replaces was built from `TRACK_WIDTH / 2` and
+ * `WHEELBASE_FRONT` - both recovered, but recovered as the WHEEL TRACK and
+ * the WHEELBASE, which place the wheels and say nothing about what the car
+ * touches. It was a third shorter than the hull at each end, so two cars
+ * could bury half a metre of nose in each other before anything resisted.
+ * Play reported exactly that.
+ *
+ * It is still a box rather than the hull, because Rapier would take the hull
+ * and nothing has yet shown the difference matters. The vertices are in
+ * `mach5.glb` when it does.
+ *
+ * THE HEIGHT IS A SUBSTITUTE, and the one number here that is not recovered.
+ * The hull reaches 0.156 about the centre of mass - it is a flat slab at the
+ * car's waist - and a box that thin costs seven times the simulation tick.
+ * Measured on the real course, 550 ticks after warm-up, p50 microseconds:
+ *
+ *                              p50     p95
+ *   today's box (z 0.4)        293     533
+ *   recovered x, y, z 0.156   2009    3684
+ *   recovered x and y, z 0.4   247     444
+ *   z 0.156 alone             2207    3879
+ *
+ * The thinness alone accounts for all of it, and the recovered width and
+ * length are if anything cheaper than what they replace. A 0.31-thick dynamic
+ * box against a 20,000-triangle trimesh with CCD on is a case the solver
+ * fights, and this project's standing rule is not to touch CCD or substeps
+ * without a demonstrated failure and a measured justification. Keeping the
+ * height at 0.4 is the alternative to doing that, and this is the measurement.
+ */
+export const CHASSIS_HALF_EXTENT = { x: 0.871, y: 1.782, z: 0.4 };
+
+/**
+ * SUBSTITUTE - the dimensions the inertia tensor is computed from, which are
+ * deliberately NOT the collider's.
+ *
+ * These are the old collider box: 1.55 by 2.4 by 0.8. The tensor is already a
+ * substitute - see `CHASSIS_INERTIA_MULTIPLIER`, whose measured yaw figure is
+ * 4.10 against our 2.72 - and recomputing it from the recovered hull would
+ * roughly double it, which is a handling change the owner has not asked for
+ * and would feel immediately. Correcting what the car TOUCHES and correcting
+ * how hard it is to TURN are two different jobs; this constant keeps them
+ * apart until the second one is taken on deliberately.
+ */
+export const CHASSIS_INERTIA_HALF_EXTENT = { x: TRACK_WIDTH / 2, y: WHEELBASE_FRONT, z: 0.4 };

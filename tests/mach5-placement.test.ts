@@ -204,3 +204,61 @@ describe('the arrangement that detached the wheels', () => {
     expect(top - underside).toBeLessThan(0.05);
   });
 });
+
+describe('the chassis collider', () => {
+  const glb = new Glb(MODEL);
+  const hull = glb.geometry('collider');
+  const com = volumeCentroid(hull.positions, hull.indices);
+
+  it('matches the recovered hull in width and length', () => {
+    // `collider` in `Car_Mach5` is a real mesh: 104 vertices, 204 triangles,
+    // spanning x -0.871..0.871 and y -1.706..1.706, with the centre of mass
+    // at y -0.076. So about the point the chassis integrates about it reaches
+    // 0.871 across and 1.782 along.
+    //
+    // The box this replaced was built from `TRACK_WIDTH / 2` and
+    // `WHEELBASE_FRONT`, which are the wheel track and the wheelbase - they
+    // place the wheels and say nothing about what the car touches. It was a
+    // third short at each end, and play reported two cars burying half a
+    // metre of nose in each other.
+    const g = hull;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < g.positions.length; i += 3) {
+      minX = Math.min(minX, g.positions[i]!);
+      maxX = Math.max(maxX, g.positions[i]!);
+      minY = Math.min(minY, g.positions[i + 1]!);
+      maxY = Math.max(maxY, g.positions[i + 1]!);
+    }
+    const reachX = Math.max(maxX - com.x, com.x - minX);
+    const reachY = Math.max(maxY - com.y, com.y - minY);
+
+    expect(K.CHASSIS_HALF_EXTENT.x).toBeCloseTo(reachX, 2);
+    expect(K.CHASSIS_HALF_EXTENT.y).toBeCloseTo(reachY, 2);
+  });
+
+  it('keeps a substituted height, and says so', () => {
+    // The hull's own half-height about the centre of mass is 0.156 - it is a
+    // flat slab at the car's waist - and a dynamic box that thin against the
+    // 20,000-triangle track costs seven times the tick: p50 2009us against
+    // 247us for the same width and length at 0.4. The height is therefore a
+    // declared substitute rather than a silent one.
+    const g = hull;
+    let minZ = Infinity, maxZ = -Infinity;
+    for (let i = 2; i < g.positions.length; i += 3) {
+      minZ = Math.min(minZ, g.positions[i]!);
+      maxZ = Math.max(maxZ, g.positions[i]!);
+    }
+    const reachZ = Math.max(maxZ - com.z, com.z - minZ);
+    expect(reachZ).toBeLessThan(0.2);
+    expect(K.CHASSIS_HALF_EXTENT.z).toBeGreaterThan(reachZ * 2);
+  });
+
+  it('does not let the inertia follow the collider', () => {
+    // Correcting what the car touches and correcting how hard it is to turn
+    // are different jobs. The tensor keeps the old box's dimensions so that
+    // this change cannot alter the player's handling.
+    expect(K.CHASSIS_INERTIA_HALF_EXTENT.x).toBe(K.TRACK_WIDTH / 2);
+    expect(K.CHASSIS_INERTIA_HALF_EXTENT.y).toBe(K.WHEELBASE_FRONT);
+    expect(K.CHASSIS_INERTIA_HALF_EXTENT.x).not.toBe(K.CHASSIS_HALF_EXTENT.x);
+  });
+});
