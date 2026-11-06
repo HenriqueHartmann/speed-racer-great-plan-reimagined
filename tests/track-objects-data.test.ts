@@ -126,3 +126,48 @@ describe('populateTrack', () => {
     expect(most).toBe(26);
   });
 });
+
+describe('tree boxes', () => {
+  const trees = () => parseTrackObjects(new Uint8Array(readFileSync(FILE)))
+    .filter((o) => o.kind === 'tree');
+
+  it('boxes the trunk, not the canopy', () => {
+    // Play reported being stopped by a tree it was metres clear of. The
+    // whole-mesh bounds of `Tree_01` are 2.009 by 2.096 - that is foliage
+    // eight metres overhead - and its trunk is 0.192 by 0.221.
+    const half = trees().map((t) => Math.max(t.halfExtent.x, t.halfExtent.y));
+    half.sort((a, b) => a - b);
+    expect(half[half.length >> 1]).toBeLessThan(0.5);
+    expect(half[half.length - 1]).toBeLessThan(1);
+  });
+
+  it('keeps the whole tree s height, so none can be driven over', () => {
+    for (const t of trees()) {
+      expect(t.halfExtent.z, 'every tree is a tall column').toBeGreaterThan(1);
+    }
+  });
+
+  it('measures each tree rather than assuming one number', () => {
+    // Measured, and smaller than expected: the 355 trees come in exactly two
+    // sizes, 0.1916 and 0.3788 across. So the per-tree measurement is doing
+    // real work - a single constant would be wrong for one of the two - but
+    // it is two values, not 355.
+    const widths = new Set(trees().map((t) => t.halfExtent.x.toFixed(4)));
+    expect(widths.size).toBe(2);
+    expect([...widths].sort()).toEqual(['0.1916', '0.3788']);
+    // And the larger is the larger tree, not a wider trunk on a small one.
+    const byWidth = new Map<string, number>();
+    for (const t of trees()) byWidth.set(t.halfExtent.x.toFixed(4), t.halfExtent.z);
+    expect(byWidth.get('0.3788')!).toBeGreaterThan(byWidth.get('0.1916')!);
+  });
+
+  it('leaves the pickups measured over their whole mesh', () => {
+    // Only trees have a canopy to exclude. A pickup is small and solid and
+    // its bounds are its bounds.
+    const pickups = parseTrackObjects(new Uint8Array(readFileSync(FILE)))
+      .filter((o) => o.kind !== 'tree');
+    for (const p of pickups) {
+      expect(p.halfExtent.x, p.kind).toBeGreaterThan(0.2);
+    }
+  });
+});

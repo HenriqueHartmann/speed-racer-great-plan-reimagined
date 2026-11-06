@@ -27,6 +27,8 @@ export class PropColliders {
   private readonly props = new Map<number, Prop>();
   /** Per prop, the bits of the vehicles it is currently tangible to. */
   private readonly masks = new Map<number, number>();
+  /** Vehicles whose saw is up, and which may therefore drive through trees. */
+  private readonly bladed = new Set<number>();
   /** Per vehicle, the segment whose solids are tangible to it. */
   private readonly active = new Map<number, number>();
 
@@ -45,6 +47,27 @@ export class PropColliders {
         this.props.set(prop.id, prop);
       }
     }
+  }
+
+  /**
+   * Raise or lower a vehicle's saw, which decides whether trees stop it.
+   *
+   * RECOVERED, and per pair in the original too: `doMach5:351-356` runs
+   * `gHavok.disableCollision(pCarBody.name, SEG_TRE[gSEG][i].name)` over the
+   * segment's trees when the Blades go up, naming the car, and
+   * `enableCollision` over the same list when they come down. So a tree goes
+   * intangible to the MACH 5 and stays solid for everybody else - which is
+   * what the per-vehicle filters already express.
+   *
+   * The other half of that pair of lines, `collision.enabled = 1`, is the
+   * chop trigger, and it lives in the simulation rather than here.
+   */
+  setBladesActive(vehicle: number, active: boolean): void {
+    const had = this.bladed.has(vehicle);
+    if (had === active) return;
+    if (active) this.bladed.add(vehicle);
+    else this.bladed.delete(vehicle);
+    this.refresh();
   }
 
   /** Make `segmentIndex`'s solids the only ones tangible to `vehicle`. */
@@ -79,8 +102,11 @@ export class PropColliders {
       let mask = 0;
       if (this.props.get(id)!.active) {
         const owner = this.ownerSegment.get(id)!;
+        const isTree = this.props.get(id)!.kind === 'tree';
         for (const [vehicle, segment] of this.active) {
-          if (segment === owner) mask |= vehicleBit(vehicle);
+          if (segment !== owner) continue;
+          if (isTree && this.bladed.has(vehicle)) continue;
+          mask |= vehicleBit(vehicle);
         }
       }
       this.masks.set(id, mask);

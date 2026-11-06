@@ -168,7 +168,16 @@ export class World {
       this.collisionCooldown = Math.max(0, this.collisionCooldown - K.TICK_DT);
     }
 
-    const carHalf = vec3(K.TRACK_WIDTH / 2, K.WHEELBASE_FRONT, 0.5);
+    // The same box the physics uses. These were separate numbers until the
+    // collider was corrected to the recovered hull and this one was not:
+    // Rapier then stopped the car 0.58 short of where the simulation thought
+    // its nose was, so a tree blocked the car and registered no impact at
+    // all. One source, so they cannot drift apart again.
+    const carHalf = vec3(
+      K.CHASSIS_HALF_EXTENT.x,
+      K.CHASSIS_HALF_EXTENT.y,
+      K.CHASSIS_HALF_EXTENT.z,
+    );
     const pos = this.body.position;
     const stillTouching = new Set<number>();
 

@@ -427,6 +427,7 @@ async function main(): Promise<void> {
       const view = propViews.get(prop.id);
       if (view) view.visible = prop.active;
     }
+    propColliders.setBladesActive(0, world.vehicle.hasBlades);
     propColliders.sync();
 
     // The scenery that moves: the water's slosh and the skydome riding with
