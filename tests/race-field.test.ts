@@ -244,7 +244,12 @@ describe('RaceField', () => {
     }
 
     expect(f.enemiesRemaining).toBeLessThanOrEqual(0);
-    expect(f.rivals.every((r) => !r.state.alive)).toBe(true);
+    // Every ordinary car leaves; the Duggary does not. `doJump:247` removes
+    // the car from the world only `if pCarBody.userData.isDuggary = 0`, and
+    // the boss is still out there when the rest of the field has gone.
+    const survivors = f.rivals.filter((r) => r.state.alive);
+    expect(survivors.length).toBe(1);
+    expect(survivors[0]!.duggary).toBe(true);
   });
 
   it('gives each rival its own random stream', () => {
@@ -346,5 +351,154 @@ describe('RaceField damage', () => {
     f.hit(r, { source: 'playerBlades', force: 0 }, vec3(0, 900, 0));
     expect(r.state.damage).toBe(0);
     expect(f.killScore).toBe(0);
+  });
+});
+
+describe('the Duggary', () => {
+  /** Run the field down until the boss is promoted. */
+  function promoted() {
+    const { f, bodies } = field();
+    bodies.forEach((b) => (b.position = vec3(0, 1000, 0)));
+    tick(f, 900);
+    while (f.enemiesRemaining > 1 && f.rivals.some((r) => r.state.alive)) {
+      bodies.forEach((b) => (b.position = vec3(0, 800, 0)));
+      tick(f, 900);
+      bodies.forEach((b) => (b.position = vec3(0, 1000, 0)));
+      tick(f, 900);
+    }
+    const boss = f.rivals.find((r) => r.duggary)!;
+    return { f, bodies, boss };
+  }
+
+  it('is promoted when the field is down to its last car', () => {
+    // `doJump:303-305`: `if (enemiesRemaining = 1) and (duggaryCreated = 0)`.
+    const { f, boss } = promoted();
+    expect(boss).toBeDefined();
+    expect(f.rivals.filter((r) => r.duggary).length).toBe(1);
+  });
+
+  it('idles at four fifths until the player comes near', () => {
+    const { f, bodies, boss } = promoted();
+    boss.woken = false;
+    bodies[boss.index]!.position = vec3(0, 2000, 0); // a long way ahead
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(boss.woken).toBe(false);
+    expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_ASLEEP, 6);
+  });
+
+  it('wakes once the player closes to 30, and never sleeps again', () => {
+    const { f, bodies, boss } = promoted();
+    boss.woken = false;
+    bodies[boss.index]!.position = vec3(0, 920, 0); // 20 ahead
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(boss.woken).toBe(true);
+
+    bodies[boss.index]!.position = vec3(0, 3000, 0); // miles away again
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(boss.woken).toBe(true);
+  });
+
+  it('chases hard when it has been dropped', () => {
+    const { f, bodies, boss } = promoted();
+    boss.woken = true;
+    bodies[boss.index]!.position = vec3(0, 800, 0); // 100 behind
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_CHASING, 6);
+  });
+
+  it('defends when it is just ahead, and cruises when it is clear', () => {
+    const { f, bodies, boss } = promoted();
+    boss.woken = true;
+    bodies[boss.index]!.position = vec3(0, 900.5, 0);
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_DEFENDING, 6);
+
+    bodies[boss.index]!.position = vec3(0, 950, 0); // 50 clear
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_CRUISING, 6);
+  });
+
+  it('waits when it is a long way clear', () => {
+    const { f, bodies, boss } = promoted();
+    boss.woken = true;
+    bodies[boss.index]!.position = vec3(0, 1100, 0); // 200 ahead
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_WAITING, 6);
+  });
+
+  it('matches the player s CURRENT speed when they are alongside', () => {
+    // `doEnemy:777`: `gM5Speed`, not `gM5MaxSpeed`. The duel tracks what the
+    // player is actually doing, within five either way.
+    const { f, bodies, boss } = promoted();
+    boss.woken = true;
+    boss.matchUntil = 0;
+    bodies[boss.index]!.position = vec3(0, 905, 0); // 5 ahead: mode 4
+    const playerSpeed = 30;
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, playerSpeed);
+    expect(boss.state.maxSpeed).toBeGreaterThanOrEqual(playerSpeed - 5);
+    expect(boss.state.maxSpeed).toBeLessThan(playerSpeed - 5 + K.DUGGARY_MATCH_SPREAD);
+  });
+
+  it('holds a matched speed for four seconds before re-rolling', () => {
+    const { f, bodies, boss } = promoted();
+    boss.woken = true;
+    boss.matchUntil = 0;
+    bodies[boss.index]!.position = vec3(0, 905, 0);
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, 30);
+    const held = boss.state.maxSpeed;
+    for (let i = 0; i < 10; i++) f.step(vec3(0, 900, 0), K.MAX_SPEED, 60);
+    expect(boss.state.maxSpeed).toBe(held);
+  });
+
+  it('takes no damage from anything, Robot included', () => {
+    const { f, boss } = promoted();
+    f.hit(boss, { source: 'playerBlades', force: 0 }, vec3(0, 900, 0));
+    f.hit(boss, { source: 'scenery', force: 1000, sceneryReady: true }, vec3(0, 900, 0));
+    boss.state.control = 'spun';
+    f.hit(boss, { source: 'player', force: 0 }, vec3(0, 900, 0));
+    expect(boss.state.damage).toBe(0);
+    expect(boss.state.alive).toBe(true);
+    expect(f.killScore).toBe(0);
+  });
+
+  it('is put back beside the player when it is lost, not recycled away', () => {
+    const { f, bodies, boss } = promoted();
+    const playerY = waypoint(path, 60).y;
+    // Keep the others alongside, or they are lost in the same tick and the
+    // count moves for reasons that have nothing to do with the boss.
+    bodies.forEach((b) => (b.position = vec3(0, playerY + 10, 0)));
+    const remaining = f.enemiesRemaining;
+    bodies[boss.index]!.position = vec3(0, playerY - 500, 0);
+
+    f.step(vec3(0, playerY, 0), K.MAX_SPEED, K.MAX_SPEED);
+
+    expect(boss.state.alive).toBe(true);
+    expect(f.enemiesRemaining).toBe(remaining); // it is not one of the nineteen
+    expect(Math.abs(bodies[boss.index]!.position.y - playerY)).toBeLessThan(200);
+  });
+
+  it('will not be put back more than once in five seconds', () => {
+    // The original reads like a stuck detector and is not one: `lastYPos` is
+    // assigned from `thisYPos` on the line before the comparison, so the test
+    // is always true and the reset is simply on a cooldown.
+    const { f, bodies, boss } = promoted();
+    const playerY = waypoint(path, 60).y;
+    bodies.forEach((b) => (b.position = vec3(0, playerY + 10, 0)));
+
+    bodies[boss.index]!.position = vec3(0, playerY - 500, 0);
+    f.step(vec3(0, playerY, 0), K.MAX_SPEED, K.MAX_SPEED);
+    const firstPlace = bodies[boss.index]!.position.y;
+
+    bodies[boss.index]!.position = vec3(0, playerY - 500, 0);
+    f.step(vec3(0, playerY, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(bodies[boss.index]!.position.y).toBe(playerY - 500); // refused
+
+    bodies[boss.index]!.position = vec3(0, playerY + 10, 0);
+    for (let i = 0; i < Math.round(K.DUGGARY_RESET_COOLDOWN_S / K.TICK_DT); i++) {
+      f.step(vec3(0, playerY, 0), K.MAX_SPEED, K.MAX_SPEED);
+    }
+    bodies[boss.index]!.position = vec3(0, playerY - 500, 0);
+    f.step(vec3(0, playerY, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(bodies[boss.index]!.position.y).toBeCloseTo(firstPlace, 0);
   });
 });

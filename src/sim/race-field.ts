@@ -42,6 +42,14 @@ export interface RivalRuntime {
   smartUntil: number;
   /** Its own random stream, so one car's draws cannot move another's. */
   readonly rng: Rng;
+  /** `userData.isDuggary` - the boss, promoted when the field runs down to one. */
+  duggary: boolean;
+  /** `pUsePassMODE` - set the first time the player comes within 30. */
+  woken: boolean;
+  /** When its matched speed is next re-rolled, in our ticks. */
+  matchUntil: number;
+  /** When a reset is allowed again. `isStuckTIMER` plus five seconds. */
+  resetAfter: number;
 }
 
 export interface RaceFieldOptions {
@@ -79,6 +87,10 @@ export class RaceField {
         behind: false,
         smart: true,
         smartUntil: 0,
+        duggary: false,
+        woken: false,
+        matchUntil: 0,
+        resetAfter: 0,
         // Index 0 is the player's, so the rivals take 1 upward - see
         // `substream`'s note on why they are not allowed to share.
         rng: substream(seed, index + 1),
@@ -95,11 +107,18 @@ export class RaceField {
    * see another's same-tick result and the order cannot become load-bearing
    * without a test noticing.
    */
-  step(playerPosition: Vec3, playerTopSpeed: number): void {
+  step(playerPosition: Vec3, playerTopSpeed: number, playerSpeed = playerTopSpeed): void {
     for (const rival of this.rivals) {
       if (!rival.state.alive) continue;
 
-      this.setSpeed(rival, playerPosition, playerTopSpeed);
+      // `doEnemy:808-816`: the first time the player closes to 30, the boss
+      // wakes up. It never goes back to sleep.
+      if (rival.duggary && !rival.woken
+        && rival.body.position.y - playerPosition.y < K.DUGGARY_WAKE_DISTANCE) {
+        rival.woken = true;
+      }
+
+      this.setSpeed(rival, playerPosition, playerTopSpeed, playerSpeed);
       stepRival(rival.state, rival.body, this.opts.probe, this.opts.path);
       if (!rival.state.alive) {
         // It ran off the end of the racing line. `doEnemy:428-443`.
@@ -118,8 +137,18 @@ export class RaceField {
    * speed. The cornering factor is applied in `rival.ts`, where the throttle
    * that it modifies lives.
    */
-  private setSpeed(rival: RivalRuntime, player: Vec3, playerTopSpeed: number): void {
+  private setSpeed(
+    rival: RivalRuntime,
+    player: Vec3,
+    playerTopSpeed: number,
+    playerSpeed: number,
+  ): void {
     const offset = rival.body.position.y - player.y;
+
+    if (rival.duggary) {
+      this.setDuggarySpeed(rival, offset, playerTopSpeed, playerSpeed);
+      return;
+    }
 
     if (!rival.smart) {
       rival.state.maxSpeed = playerTopSpeed * K.RIVAL_SPEED_MIN;
@@ -141,6 +170,50 @@ export class RaceField {
 
     rival.state.maxSpeed = playerTopSpeed * K.RIVAL_SPEED_REGULAR;
     rival.smartUntil = 0;
+  }
+
+  /**
+   * `doEnemy:730-779`. The boss drives off its own five-way table.
+   *
+   * Until the player first comes within 30 it idles at 0.8 of their top speed
+   * (`:777`). After that it chases hard when it has been dropped, defends
+   * when it is just ahead, cruises when it is clear, waits when it is a long
+   * way clear - and when the player is alongside it matches their CURRENT
+   * speed, re-rolled every four seconds, which is what makes the last fight
+   * feel like a duel rather than a chase.
+   */
+  private setDuggarySpeed(
+    rival: RivalRuntime,
+    offset: number,
+    playerTopSpeed: number,
+    playerSpeed: number,
+  ): void {
+    if (!rival.woken) {
+      rival.state.maxSpeed = playerTopSpeed * K.DUGGARY_SPEED_ASLEEP;
+      return;
+    }
+
+    if (!rival.smart) {
+      rival.state.maxSpeed = playerTopSpeed * K.DUGGARY_SPEED_WAITING;
+      return;
+    }
+
+    if (offset < K.DUGGARY_FAR_BEHIND) {
+      rival.state.maxSpeed = playerTopSpeed * K.DUGGARY_SPEED_CHASING;
+    } else if (offset < K.DUGGARY_AHEAD) {
+      rival.state.maxSpeed = playerTopSpeed * K.DUGGARY_SPEED_DEFENDING;
+    } else if (offset > K.DUGGARY_FAR_AHEAD) {
+      rival.state.maxSpeed = playerTopSpeed * K.DUGGARY_SPEED_WAITING;
+    } else if (offset > K.DUGGARY_CLEAR_AHEAD) {
+      rival.state.maxSpeed = playerTopSpeed * K.DUGGARY_SPEED_CRUISING;
+    } else if (rival.matchUntil <= this.tick) {
+      // `:775-779`: only re-rolled on the timer, so between rolls the speed
+      // it was given stands rather than being recomputed every tick.
+      rival.state.maxSpeed = playerSpeed
+        + K.DUGGARY_MATCH_OFFSET
+        + rival.rng.nextInt(K.DUGGARY_MATCH_SPREAD);
+      rival.matchUntil = this.tick + Math.round(K.DUGGARY_MATCH_PERIOD_S / K.TICK_DT);
+    }
   }
 
   /**
@@ -183,7 +256,36 @@ export class RaceField {
     const lost = offset < -K.RIVAL_RECYCLE_BEHIND
       || rival.body.position.z < K.RIVAL_RECYCLE_FLOOR_Z;
     if (!lost) return;
+
+    if (rival.duggary) {
+      // `doEnemy:852-856`. The boss is never recycled and never removed; it
+      // is put back alongside the player, at most once every five seconds.
+      // See DUGGARY_RESET_COOLDOWN_S for why that cooldown is all the
+      // original's "stuck detection" amounts to.
+      if (this.tick < rival.resetAfter) return;
+      rival.resetAfter = this.tick + Math.round(K.DUGGARY_RESET_COOLDOWN_S / K.TICK_DT);
+      this.resetDuggary(rival, player);
+      return;
+    }
+
     this.recycle(rival, player);
+  }
+
+  /**
+   * `doResetDuggary`. Walk the line to the player's own Y and drop in there.
+   *
+   * The original walks `pathList` for the first waypoint at or past the
+   * player and takes the one before it, so the boss reappears just behind
+   * rather than on top of them.
+   */
+  private resetDuggary(rival: RivalRuntime, player: Vec3): void {
+    let step = 1;
+    while (step < this.opts.path.count && waypoint(this.opts.path, step).y < player.y) {
+      step += 1;
+    }
+    this.rejoin(rival, Math.max(1, step - 1));
+    rival.behind = false;
+    rival.state.control = 'driving';
   }
 
   /** `doJump`. The teleport itself, reached from a fall or from a wreck. */
@@ -214,6 +316,12 @@ export class RaceField {
     this.rejoin(rival, rejoinAt);
     rival.behind = false;
     this.enemiesRemaining -= 1;
+
+    // `doJump:303-305`: when the field is down to its last car, the one just
+    // recycled becomes the Duggary. Once only - `duggaryCreated` guards it.
+    if (this.enemiesRemaining === 1 && !this.rivals.some((r) => r.duggary)) {
+      rival.duggary = true;
+    }
   }
 
   /**
@@ -226,6 +334,8 @@ export class RaceField {
    */
   hit(rival: RivalRuntime, impact: Omit<Impact, 'spun'>, player: Vec3): void {
     if (!rival.state.alive) return;
+    // `doEnemy:181-183`: the boss takes nothing from anything, Robot included.
+    if (rival.duggary) return;
 
     const spun = rival.state.control === 'spun';
     const before = rival.state.mode;

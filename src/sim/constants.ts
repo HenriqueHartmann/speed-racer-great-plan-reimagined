@@ -657,3 +657,51 @@ export const RIVAL_KILL_SCORE = 1000;
  * The original's `hitforce` itself remains UNRESOLVED. This is not it.
  */
 export const IMPACT_FORCE_SCALE = 0.1;
+
+// --- the Duggary ------------------------------------------------------------
+// The boss rival. `enemiesRemaining = 1` promotes the next recycled car
+// (`doEnemy:303-309`); from then on it is immune, it never leaves the world,
+// and it drives off its own five-way table.
+
+/** RECOVERED - `doEnemy:808`: coming this close wakes its pass modes up. */
+export const DUGGARY_WAKE_DISTANCE = 30;
+
+/** RECOVERED - `doEnemy:739,745,749,753`: the thresholds of the five-way table. */
+export const DUGGARY_FAR_BEHIND = -50;
+export const DUGGARY_AHEAD = 1;
+export const DUGGARY_FAR_AHEAD = 100;
+export const DUGGARY_CLEAR_AHEAD = 15;
+
+/** RECOVERED - `doEnemy:762,766,770,774`: and its speeds, before it is woken. */
+export const DUGGARY_SPEED_ASLEEP = 0.8;
+export const DUGGARY_SPEED_CHASING = 1.3;
+export const DUGGARY_SPEED_DEFENDING = 1.2;
+export const DUGGARY_SPEED_CRUISING = 0.85;
+export const DUGGARY_SPEED_WAITING = 0.5;
+
+/**
+ * RECOVERED - `doEnemy:775-779`, the fifth mode, when the player is alongside.
+ *
+ * `ts = gM5Speed - 5 + random(12)`, re-rolled every four seconds - against
+ * the player's CURRENT speed, not its top speed, so the Duggary matches
+ * whatever the player is doing and then wanders a few either way.
+ */
+export const DUGGARY_MATCH_OFFSET = -5;
+export const DUGGARY_MATCH_SPREAD = 12;
+export const DUGGARY_MATCH_PERIOD_S = 4;
+
+/**
+ * RECOVERED, and a bug - `doEnemy:403-413`.
+ *
+ * The script reads as a stuck detector: five seconds without gaining two
+ * units of Y and the Duggary is teleported back alongside the player. It is
+ * not one. Line 404 assigns `lastYPos = thisYPos` immediately before line 407
+ * tests `thisYPos <= (lastYPos + 2)`, so the test is `y <= y + 2` and is
+ * always true; the `else` that would clear the flag and restart the timer is
+ * unreachable. What the code actually implements is a five-second COOLDOWN on
+ * the reset, which then fires whenever the Duggary is 40 behind or out of the
+ * world (`:852-856`).
+ *
+ * Ported as what it does, not as what it reads like.
+ */
+export const DUGGARY_RESET_COOLDOWN_S = 5;
