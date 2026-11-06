@@ -85,26 +85,32 @@ echo "==> decoding the Mach 5"
 echo "==> decoding the track"
 "$MACROMELT" "$WORK/xmed/SR_level_1_7587.xmed" --export-glb "$OUT/track.glb"
 
-# 5. Reduce it to the ground data the simulation reads. The renderer uses the
+# 5. Decode the rivals' car. Resource 7591 is `Car_Enemy`: one body, the
+#    Duggary's own body, a windshield, a shadow, the spin robot and four
+#    wheels, which reuse the Mach 5's node names.
+echo "==> decoding the rival car"
+"$MACROMELT" "$WORK/xmed/SR_level_1_7591.xmed" --export-glb "$OUT/enemy.glb"
+
+# 6. Reduce it to the ground data the simulation reads. The renderer uses the
 #    .glb; src/sim/ must never need a glTF loader.
 echo "==> building the ground data"
 node "$ROOT/tools/build_track_ground.mjs" "$OUT/track.glb" "$OUT/track-ground.bin"
 
-# 6. And the level's solid barriers - walls, invisible fences, the rail.
+# 7. And the level's solid barriers - walls, invisible fences, the rail.
 #    MISC_ is deliberately not among them: PREP has no branch for it.
 echo "==> building the barriers"
 node "$ROOT/tools/build_track_solids.mjs" "$OUT/track.glb" "$OUT/track-solids.bin"
 
-# 7. And the individual objects: 355 trees and 77 pickups.
+# 8. And the individual objects: 355 trees and 77 pickups.
 echo "==> building the objects"
 node "$ROOT/tools/build_track_objects.mjs" "$OUT/track.glb" "$OUT/track-objects.bin"
 
-# 8. And the rivals' racing line: the 209 path_ waypoints, quantised as
+# 9. And the rivals' racing line: the 209 path_ waypoints, quantised as
 #    PREP:308-311 quantises them.
 echo "==> building the racing line"
 node "$ROOT/tools/build_track_path.mjs" "$OUT/track.glb" "$OUT/track-path.bin"
 
 echo
 echo "wrote:"
-sha256sum "$OUT/mach5.glb" "$OUT/track.glb" "$OUT/track-ground.bin" \
+sha256sum "$OUT/mach5.glb" "$OUT/enemy.glb" "$OUT/track.glb" "$OUT/track-ground.bin" \
           "$OUT/track-solids.bin" "$OUT/track-objects.bin" "$OUT/track-path.bin"

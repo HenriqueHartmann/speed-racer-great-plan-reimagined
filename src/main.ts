@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import * as K from './sim/constants.js';
 import { World } from './sim/world.js';
 import { vec3, type VehicleInput } from './sim/vehicle.js';
-import { Track } from './sim/track.js';
+import { Track, segmentIndexFor } from './sim/track.js';
 import { GADGETS, GADGET_BY_KEY, type GadgetId } from './sim/gadgets.js';
 import {
   initRapier,
@@ -29,6 +29,9 @@ import { Mach5 } from './render/mach5.js';
 import { TrackView } from './render/track-view.js';
 import { SegmentColliders } from './physics/segment-colliders.js';
 import { PropColliders } from './physics/prop-colliders.js';
+import { RaceField } from './sim/race-field.js';
+import { parseTrackPath, waypoint } from './sim/track-path.js';
+import { RivalView } from './render/rival-view.js';
 import { parseGroundMesh, parseSolidMesh } from './sim/ground-mesh.js';
 import { parseTrackObjects, populateTrack } from './sim/track-objects.js';
 import { OriginalMach5 } from './render/mach5-original.js';
@@ -36,6 +39,7 @@ import { OriginalMach5 } from './render/mach5-original.js';
 const TRACK_GROUND_URL = 'models/track-ground.bin';
 const TRACK_SOLIDS_URL = 'models/track-solids.bin';
 const TRACK_OBJECTS_URL = 'models/track-objects.bin';
+const TRACK_PATH_URL = 'models/track-path.bin';
 
 /** Driving keys are held; gadget keys are edge-triggered. */
 type DriveKey = 'forward' | 'backward' | 'left' | 'right';
@@ -194,6 +198,33 @@ async function main(): Promise<void> {
 
   let world = newWorld();
 
+  // --- the rivals ----------------------------------------------------------
+  // Three cars standing in for nineteen: `PREP:49-52` sets
+  // `enemiesRemaining = 19` while `enemyPositionsList` has three slots, and a
+  // car that falls behind is recycled in front of the leader.
+  const path = parseTrackPath(
+    new Uint8Array(await (await fetch(TRACK_PATH_URL)).arrayBuffer()),
+  );
+  // SUBSTITUTE: `pStartingPathStep` is a Director sprite property living in
+  // the binary score and is not recoverable from any decompiled script. Three
+  // evenly spaced steps ahead of the player put the field on the road in
+  // front without inventing a formation the original might not have had.
+  const rivalStarts = [3, 6, 9];
+  const rivalBodies = rivalStarts.map((step, i) => {
+    const at = waypoint(path, step);
+    const under = track.castDown(vec3(at.x, at.y, at.z), 50);
+    const place = vec3(
+      at.x,
+      at.y,
+      (under ? at.z - under.distance : at.z) + K.RIVAL_PLACE_HEIGHT,
+    );
+    // Vehicle 0 is the player; the rivals take the bits above it.
+    return new RapierChassis(rapier, host, place, K.RIVAL_MASS, i + 1);
+  });
+  const field = new RaceField({ path, probe: track, seed: 0x5eed_1234, bodies: rivalBodies, starts: rivalStarts });
+  /** Each rival's own solid segment, so none of them falls through the world. */
+  const rivalSegments = rivalStarts.map(() => 0);
+
   /**
    * Put the car back on the start line and begin again.
    *
@@ -261,6 +292,18 @@ async function main(): Promise<void> {
   } catch (err) {
     console.warn('the track model did not load:', err);
   }
+
+  // The rivals. One clone of `Car_Enemy` each, as `prepareCar:90-100` made
+  // them. A missing model costs the picture and not the race.
+  let rivalView: RivalView | null = null;
+  try {
+    const view = await RivalView.load(field.rivals.length);
+    scene.add(view.object);
+    rivalView = view;
+  } catch (err) {
+    console.warn('the rival model did not load:', err);
+  }
+
   // The props are drawn as the meshes they are, matched to the simulation's
   // props by position in the extractor's name-sorted list. The placeholder
   // boxes stay as the fallback for a missing or short model file.
@@ -319,6 +362,18 @@ async function main(): Promise<void> {
     let stepped = 0;
     while (accumulator >= K.TICK_DT && stepped < MAX_CATCHUP_TICKS) {
       world.step({ ...input.state, gadgetPresses: presses });
+      // The player's controller runs first, then the rivals, then one physics
+      // step - which `World.step` has already taken. SUBSTITUTE order: the
+      // original's is the sprite order in the binary score.
+      field.step(chassis.position, K.MAX_SPEED, world.vehicle.forwardVel);
+      for (let i = 0; i < field.rivals.length; i++) {
+        const seg = segmentIndexFor(field.rivals[i]!.body.position.y);
+        if (seg === rivalSegments[i]) continue;
+        rivalSegments[i] = seg;
+        segmentColliders.setActive(seg, i + 1);
+        solidColliders.setActive(seg, i + 1);
+        propColliders.setActive(seg, i + 1);
+      }
       presses = [];
       accumulator -= K.TICK_DT;
       stepped++;
@@ -373,6 +428,17 @@ async function main(): Promise<void> {
     // the camera. Per rendered frame, not per tick - nothing in it feeds back
     // into the simulation.
     trackView?.update(chase.camera.position);
+    rivalView?.update(
+      field.rivals.map((rival) => ({
+        position: rival.body.position,
+        forward: rival.body.forward,
+        up: rival.body.up,
+        hoverDistances: rival.state.vehicle.hoverDistances,
+        alive: rival.state.alive,
+        duggary: rival.duggary,
+        spun: rival.state.control === 'spun',
+      })),
+    );
 
     renderer.render(scene, chase.camera);
 
