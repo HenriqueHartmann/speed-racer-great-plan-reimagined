@@ -18,7 +18,7 @@ import { applyChassisOrientation } from './scene.js';
 import { wheelDrop } from './model-frame.js';
 import { clearYUpConversion } from './scene-root.js';
 import * as K from '../sim/constants.js';
-import type { Vec3 } from '../sim/vehicle.js';
+import { WHEEL_LOCAL_POINTS, type Vec3 } from '../sim/vehicle.js';
 
 export const ENEMY_MODEL_URL = 'models/enemy.glb';
 
@@ -27,6 +27,27 @@ const WHEEL_NODES = ['mach5_wheel_FL', 'mach5_wheel_FR', 'mach5_wheel_RL', 'mach
 
 const ORDINARY_BODY = 'car_body';
 const DUGGARY_BODY = 'car_bodyDuggery';
+
+/**
+ * Parts the game re-parents to the chassis every frame, so their authored
+ * translations are thrown away.
+ *
+ * `doEnemy:370-371` assigns `pCarShell.transform = pCarBody.transform` and the
+ * same for the windshield, and `:484-486` does it for the robot. The enemy
+ * model parks all three at (0, 0.037, 0.311) - the same kind of authoring
+ * offset that once left 0.31 of air between the Mach 5 and its wheels.
+ */
+const PINNED = new Set([ORDINARY_BODY, DUGGARY_BODY, 'car_windshield', 'robot']);
+
+/**
+ * Not drawn, as the player's is not.
+ *
+ * `car_shadow` is a flat plane the original slides under the rear axle
+ * (`doEnemy:605-607`). This project draws no shadow planes for the player
+ * either - `NEVER_DRAWN` holds it - and an unplaced one stands on edge under
+ * the car, which is exactly how it looked.
+ */
+const NEVER_DRAWN = new Set(['car_shadow']);
 
 /** Everything the renderer needs about one rival this frame. */
 export interface RivalViewState {
@@ -40,9 +61,22 @@ export interface RivalViewState {
   readonly spun: boolean;
 }
 
-/** One car's nodes, looked up once. */
+/**
+ * One car, in the Mach 5's own two-level shape.
+ *
+ * `chassis` is what gets oriented every frame, and it sits at the centre of
+ * mass because that is the point the simulation integrates about. `body`
+ * hangs inside it, offset by `-centreOfMass`, because the original's chassis
+ * origin was the rigid body's position with the centre of mass an offset from
+ * it. The WHEELS hang off `chassis` directly, not off `body`: their wheel
+ * points are measured from the centre of mass, which is where `chassis` is.
+ *
+ * Collapsing the two is what this file got wrong first: `applyChassisOrientation`
+ * writes the node's position outright, so orienting the same node that carried
+ * the offset wiped the offset on the first frame.
+ */
 interface RivalCar {
-  readonly root: THREE.Object3D;
+  readonly chassis: THREE.Object3D;
   readonly wheels: (THREE.Object3D | null)[];
   readonly ordinary: THREE.Object3D | null;
   readonly duggary: THREE.Object3D | null;
@@ -52,28 +86,88 @@ interface RivalCar {
 export class RivalView {
   private readonly cars: RivalCar[] = [];
 
-  private constructor(readonly object: THREE.Object3D, count: number, template: THREE.Object3D) {
+  private constructor(
+    readonly object: THREE.Object3D,
+    count: number,
+    template: THREE.Object3D,
+    centerOfMass: Vec3,
+  ) {
+    // Prepare the template ONCE, then clone it for every car - including the
+    // first. Letting car 0 keep the template was a real defect: the wheels
+    // are reparented out of the model onto the chassis below, so the clones
+    // taken afterwards came out with no wheels at all, and a bodywork with no
+    // wheels reads on screen as a car lying flat on the road.
+    RivalView.hangOffTheChassis(template);
+
     for (let i = 0; i < count; i++) {
-      // The first car takes the loaded scene; the rest are clones of it, which
-      // is what `cloneModelFromCastmember` did once per rival.
-      const root = i === 0 ? template : template.clone(true);
-      root.name = `rival_${i}`;
-      object.add(root);
+      // `cloneModelFromCastmember`, once per rival.
+      const model = template.clone(true);
+
+      const chassis = new THREE.Group();
+      chassis.name = `rival_${i}`;
+      const body = new THREE.Group();
+      body.name = `rival_${i}_body`;
+      body.position.set(-centerOfMass.x, -centerOfMass.y, -centerOfMass.z);
+      body.add(model);
+      chassis.add(body);
+      object.add(chassis);
+
+      // Reparent the wheels onto the chassis, out from under the body's
+      // offset, exactly as the player's model does.
+      const wheels = WHEEL_NODES.map((n) => {
+        const wheel = model.getObjectByName(n);
+        if (wheel) chassis.add(wheel);
+        return wheel ?? null;
+      });
+
       this.cars.push({
-        root,
-        wheels: WHEEL_NODES.map((n) => root.getObjectByName(n) ?? null),
-        ordinary: root.getObjectByName(ORDINARY_BODY) ?? null,
-        duggary: root.getObjectByName(DUGGARY_BODY) ?? null,
-        robot: root.getObjectByName('robot') ?? null,
+        chassis,
+        wheels,
+        ordinary: model.getObjectByName(ORDINARY_BODY) ?? null,
+        duggary: model.getObjectByName(DUGGARY_BODY) ?? null,
+        robot: model.getObjectByName('robot') ?? null,
       });
     }
   }
 
-  static async load(count = K.RIVAL_CONCURRENT): Promise<RivalView> {
+  /**
+   * Throw the authoring positions away and hang the model off the chassis.
+   *
+   * The same two offsets the Mach 5 needed, and for the same reasons - see
+   * `OriginalMach5.hangOffTheChassis`. The rival's rigid body is literally the
+   * Mach 5's collider (`prepareCar:90` clones `"collider"` out of
+   * `member("Car_Mach5")`), so its centre of mass is the same one, which is
+   * why it is passed in rather than measured again from a mesh this file does
+   * not have.
+   */
+  private static hangOffTheChassis(root: THREE.Object3D): void {
+    for (const child of [...root.children]) {
+      if (NEVER_DRAWN.has(child.name)) {
+        child.visible = false;
+        continue;
+      }
+      if (PINNED.has(child.name)) child.position.set(0, 0, 0);
+    }
+  }
+
+  /**
+   * Build from a scene already in hand.
+   *
+   * Separated from `load` so the structure can be tested without a DOM:
+   * `GLTFLoader` needs one, and the structure is what went wrong twice.
+   */
+  static fromScene(scene: THREE.Object3D, count: number, centerOfMass: Vec3): RivalView {
+    return new RivalView(new THREE.Group(), count, scene, centerOfMass);
+  }
+
+  static async load(
+    count = K.RIVAL_CONCURRENT,
+    centerOfMass: Vec3 = { x: 0, y: 0, z: 0 },
+  ): Promise<RivalView> {
     const gltf = await new GLTFLoader().loadAsync(ENEMY_MODEL_URL);
     const template = gltf.scene.getObjectByName('SceneRoot') ?? gltf.scene;
     clearYUpConversion(template);
-    return new RivalView(new THREE.Group(), count, template);
+    return RivalView.fromScene(template, count, centerOfMass);
   }
 
   /** Draw one frame. States are in the simulation's own rival order. */
@@ -81,22 +175,24 @@ export class RivalView {
     this.cars.forEach((car, i) => {
       const state = states[i];
       if (!state || !state.alive) {
-        car.root.visible = false;
+        car.chassis.visible = false;
         return;
       }
-      car.root.visible = true;
+      car.chassis.visible = true;
 
-      applyChassisOrientation(car.root, state.position, state.forward, state.up);
+      applyChassisOrientation(car.chassis, state.position, state.forward, state.up);
 
       for (let w = 0; w < car.wheels.length; w++) {
         const wheel = car.wheels[w];
-        if (!wheel) continue;
+        const point = WHEEL_LOCAL_POINTS[w];
+        if (!wheel || !point) continue;
         const hover = state.hoverDistances[w] ?? K.HOVER_DISTANCE;
-        // The same drawn drop the player gets, clamp and all - a rival's
-        // suspension is the player's, and `doEnemy` draws it the same way
-        // bar the two differences recorded in the design, which are about
-        // what an ungrounded wheel holds rather than how it is drawn.
-        wheel.position.setZ(wheelDrop(hover, K.WHEEL_RADIUS));
+        // At the wheel POINT, not at the authored translation - the enemy
+        // model carries none at all, so every wheel sits at the car's centre
+        // until it is placed. `doEnemy:596` is explicit:
+        // `pWheelList[i].transform.position = pChassisMDL.transform *
+        // pWheelPointList[i]`, then dropped by the hover distance.
+        wheel.position.set(point.x, point.y, wheelDrop(hover, K.WHEEL_RADIUS));
       }
 
       // One body or the other, never both. `doJump:304-307`.

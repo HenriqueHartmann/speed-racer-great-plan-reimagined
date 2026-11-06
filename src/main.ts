@@ -253,9 +253,14 @@ async function main(): Promise<void> {
   // one stays as a fallback rather than being deleted, so a missing or broken
   // GLB degrades to a drivable car instead of a blank screen.
   let car: VehicleView;
+  // The rivals hang off the same point: their rigid body is the Mach 5's own
+  // collider (`prepareCar:90` clones `"collider"` out of `member("Car_Mach5")`),
+  // so the centre of mass is measured once, here, and handed to both.
+  let chassisCentre = { x: 0, y: 0, z: 0 };
   try {
     const original = await OriginalMach5.load();
     const { missing, uprighted, centerOfMass } = original.report();
+    chassisCentre = centerOfMass;
     if (missing.length) {
       console.warn('recovered model is missing nodes:', missing);
     }
@@ -297,7 +302,7 @@ async function main(): Promise<void> {
   // them. A missing model costs the picture and not the race.
   let rivalView: RivalView | null = null;
   try {
-    const view = await RivalView.load(field.rivals.length);
+    const view = await RivalView.load(field.rivals.length, chassisCentre);
     scene.add(view.object);
     rivalView = view;
   } catch (err) {
