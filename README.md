@@ -3,11 +3,15 @@
 A personal research project: reverse-engineering the structure of the historical browser game
 *Speed Racer: The Great Plan*, and building a modern browser-based reimagining of it.
 
-**Status: Stage 3 — there is a drivable prototype.** There is no game here yet — no gameplay code, no
-dependencies, no build. What exists is documentation of what the original artifact actually
-contains, written to a strict evidence standard. The original's Lingo source has been decompiled
-locally, so the physics constants and vehicle model are now recovered facts rather than open
-questions — the source itself stays local and is not part of this repository.
+**Status: the level is playable in a browser.** The recovered Mach 5 drives the recovered course,
+inside the original's fences, among its trees and pickups, against three rival cars standing in
+for a field of nineteen. `npm run dev` and drive it.
+
+That is the half of this project that moves. The other half is the research it rests on:
+documentation of what the original artifact actually contains, written to a strict evidence
+standard, with every constant traced to the handler it came from. The original's Lingo was
+decompiled locally and the 3D worlds decoded, so the physics, the geometry and the race rules are
+recovered facts rather than open questions.
 
 ---
 
@@ -38,16 +42,20 @@ Full details: [`docs/research/`](docs/research/).
 ```bash
 npm install
 npm run dev     # http://localhost:5173
-npm test        # determinism and replay suite
+npm test        # the whole suite
 npm run build   # production bundle
 ```
 
 W/A/S/D or the arrow keys drive; Space fires the Jacks; the digits `1`–`7` fire the seven gadgets.
 
-**The car and the course are both the original's**, decoded from the game's own Shockwave 3D
-worlds. The Mach 5 is 20 models and 4,454 triangles with its own textures; the track is the real
-37-segment course, 11,092 units of road that curves and climbs, starting at the line the original
-starts at. `tools/extract_mesh.sh` regenerates both from the artifact;
+If `localhost:5173` is refused, Vite has bound IPv6 only; `npm run dev -- --host 0.0.0.0` serves
+it on IPv4 as well.
+
+**The cars and the course are all the original's**, decoded from the game's own Shockwave 3D
+worlds. The Mach 5 is 20 models and 4,454 triangles with its own textures; the rivals are
+`Car_Enemy`, which carries the Duggary's own bodywork alongside the ordinary one; the track is
+the real 37-segment course, 11,092 units of road that curves and climbs, starting at the line the
+original starts at. `tools/extract_mesh.sh` regenerates all of it from the artifact;
 `docs/research/w3d-format.md` documents the format and the decoder, and
 `docs/design/2026-11-05-original-track.md` the track.
 
@@ -56,8 +64,16 @@ starts at. `tools/extract_mesh.sh` regenerates both from the artifact;
 oxygen all fire on the real course — they had been implemented and unreachable, because there was
 nothing to hit and nothing to collect.
 
-What is still missing is the rival AI. The 209-point racing line came decoded with the track and
-is waiting for it.
+**And so are the rivals.** They drive the original's own 209-point racing line, decoded with the
+track, and they are three cars rather than nineteen — which is what the original does:
+`enemiesRemaining = 19` while `enemyPositionsList` has three slots, so a car that falls behind is
+teleported back in front of the leader and the player climbs from twentieth by passing the same
+three over and over. The rubber band, the damage table, the place counter and the Duggary are all
+recovered. See [`docs/design/2026-11-05-rival-ai.md`](docs/design/2026-11-05-rival-ai.md).
+
+What is still missing: contact between cars does no damage, because nothing in this project reads
+Rapier's contact events yet — the rules are written and tested, and unreachable. Nothing has been
+profiled in a browser. And there is no audio at all.
 
 ---
 
@@ -74,6 +90,10 @@ is waiting for it.
 | [`docs/research/open-questions.md`](docs/research/open-questions.md) | Everything unresolved, with the next safe step for each |
 | [`docs/architecture.md`](docs/architecture.md) | Proposed technical architecture |
 | [`docs/implementation-plan.md`](docs/implementation-plan.md) | Tooling evaluation and staged plan |
+| [`docs/design/2026-11-05-original-track.md`](docs/design/2026-11-05-original-track.md) | Importing the original course: the evidence, and what stays substitute |
+| [`docs/design/2026-11-05-rival-ai.md`](docs/design/2026-11-05-rival-ai.md) | The rivals, from `doEnemy` |
+| [`docs/research/2026-11-05-rivals-audit.md`](docs/research/2026-11-05-rivals-audit.md) | Pre-implementation audit: measured performance, and the blocker the design missed |
+| [`docs/research/2026-11-05-collision-isolation.md`](docs/research/2026-11-05-collision-isolation.md) | How one shared collider answers differently for each vehicle |
 
 ---
 
@@ -97,10 +117,17 @@ Two consequences worth stating plainly:
   only string-scanned, never run. The Lingo source *has* been decompiled — using the ProjectorRays
   JavaScript core run headlessly in Node.js — so behaviour is traced from code rather than guessed
   from symbols. The native ProjectorRays CLI and LibreShockwave remain untested.
-- **Physics parameters now have values, and each cites its source handler.** They were recovered by
-  decompiling the Lingo bytecode locally. What is still unknown stays marked unknown — for example
-  which surface each grip and drag pair belongs to, and whether gravity `90.81` reflects a
-  non-metric world scale or deliberate arcade weighting.
+- **Physics parameters have values, and each cites its source handler.** They were recovered by
+  decompiling the Lingo bytecode locally, and the surfaces are no longer guesses either: each grip
+  and drag pair now carries the material name measured out of the decoded world, so the 0.016 grip
+  is `ROAD_BlueIce` and `ROAD_BLUESNOW` rather than an inference.
+
+- **What is still unknown stays marked unknown.** Whether gravity `90.81` reflects a non-metric
+  world scale or deliberate arcade weighting; the unit of Havok's `hitforce`, which the whole
+  rival damage model is denominated in; the second argument of `makeFixedRigidBody`; and the three
+  `pStartingPathStep` values, which live in the binary score rather than in any script. Where a
+  number had to be chosen anyway it is tagged `SUBSTITUTE` and the measurement that chose it is
+  recorded beside it.
 
 ---
 
@@ -118,7 +145,7 @@ the owner's own machines:
 | `original_game/extracted/` | 3D worlds and Flash members pulled out of the movies, plus 50 extracted textures |
 | `tools/` | Our own extraction and inspection tools — standard library only |
 | `src/` | The reimagining: a deterministic simulation core, a Rapier physics backend and a Three.js renderer |
-| `tests/` | Determinism and replay tests |
+| `tests/` | The suite the above is held to — determinism and replay, the decoded assets, the recovered handling, the race rules, and the model's placement on the road |
 
 The original files are never moved, renamed or modified in place. Their SHA-256 values are recorded
 in [`artifact-inventory.md`](docs/research/artifact-inventory.md) and re-verified before every
