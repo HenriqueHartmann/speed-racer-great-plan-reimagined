@@ -24,6 +24,7 @@ import {
   vec3,
   type ChassisBody,
   type GroundProbe,
+  type Vec3,
   type VehicleState,
 } from './vehicle.js';
 
@@ -33,6 +34,12 @@ export type RivalControl =
   | 'driving'
   /** Spun by the Robot, steering at random until the timer runs out. `= 0`. */
   | 'spun';
+
+/** A chassis a rival can be teleported into, which a recycle needs. */
+export interface RivalBody extends ChassisBody {
+  respawn(position: Vec3): void;
+  setRotation(q: { x: number; y: number; z: number; w: number }): void;
+}
 
 export interface RivalState {
   /** The chassis state it shares with the player, suspension and all. */

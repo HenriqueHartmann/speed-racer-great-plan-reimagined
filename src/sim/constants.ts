@@ -575,3 +575,51 @@ export const RIVAL_DIST_FULL = 50;
  * UNRESOLVED: the original's number is 0.25 of something we cannot measure.
  */
 export const RIVAL_YAW_DAMPING = 0.25;
+
+/** RECOVERED - `PREP:49`. Nineteen rivals, run three at a time. */
+export const RIVAL_FIELD_SIZE = 19;
+
+/** RECOVERED - `PREP:52`: `enemyPositionsList = [0, 0, 0]`. */
+export const RIVAL_CONCURRENT = 3;
+
+/** RECOVERED - `doEnemy:846`: this far behind the player and the car is recycled. */
+export const RIVAL_RECYCLE_BEHIND = 40;
+
+/** RECOVERED - `doEnemy:846`: or this far below the world, which is the same thing. */
+export const RIVAL_RECYCLE_FLOOR_Z = -30;
+
+/** RECOVERED - `doJump:240`: a recycled car rejoins two steps past the leader. */
+export const RIVAL_RECYCLE_LEAD = 2;
+
+/** RECOVERED - `doJump:290`: the rejoin target is jittered by +/-1 on each axis. */
+export const RIVAL_REJOIN_JITTER = 1;
+
+/** RECOVERED - `doJump:296`: the ray that finds the road under a rejoining car. */
+export const RIVAL_REJOIN_RAY = 3;
+
+/** RECOVERED - `prepareCar:107`, `doJump:300`: a placed car sits this far up. */
+export const RIVAL_PLACE_HEIGHT = 1;
+
+/**
+ * RECOVERED - `doEnemy:783-805`, the ordinary rival's speed table, as
+ * multiples of the player's own top speed (`gM5MaxSpeed`, republished every
+ * tick by `doMach5:51`).
+ *
+ * A rival the player is catching gets a 3% advantage for one to three and a
+ * half seconds, then drops to 73% and is passed. Rear-ended by another rival
+ * it falls to 60% until it is recycled.
+ */
+export const RIVAL_SPEED_TOP = 1.03;
+export const RIVAL_SPEED_REGULAR = 0.73;
+export const RIVAL_SPEED_MIN = 0.6;
+
+/**
+ * RECOVERED - `doEnemy:789`: `pSmartTIMER = the ticks + random(100) + 100`.
+ *
+ * Director's `the ticks` runs at 60 a second; our tick is `TICK_DT`. The
+ * window is converted to our own ticks rather than carried as a raw count,
+ * because a count of Director frames means nothing here.
+ */
+export const RIVAL_SMART_WINDOW_BASE_TICKS = 100;
+export const RIVAL_SMART_WINDOW_SPREAD_TICKS = 100;
+export const DIRECTOR_TICKS_PER_SECOND = 60;
