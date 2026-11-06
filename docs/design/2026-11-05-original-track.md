@@ -392,7 +392,14 @@ and belongs with the water step.
 
 ## Risks
 
-- **The hover ray is 1.0 long and the car rests 0.903 above the road**, so only
+- **Resolved since, and worse than this entry thought.** The ray is no longer
+  1.0: see `HOVER_RAY_LENGTH`, now a declared SUBSTITUTE at 1.2. The recovered
+  spring balances at d = 1.0133, beyond the recovered ray's reach, so a parked
+  car could not stay still. The figures below were measured against the
+  reference body, which rests at 0.903; the engine-backed one does not.
+
+- **The hover ray was 1.0 long and the reference body rests 0.903 above the
+  road**, so only
   0.097 of margin. The first version of this entry got the numbers and the
   reasoning wrong, and both are corrected here.
 

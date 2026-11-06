@@ -100,8 +100,35 @@ export const SUSPENSION_DAMPING = 0.05;
  */
 export const HOVER_DISTANCE = 1.2;
 
-/** RECOVERED - the original's `modelsUnderRay(..., #maxDistance: 1)`. */
-export const HOVER_RAY_LENGTH = 1;
+/**
+ * SUBSTITUTE - the original casts this ray with `#maxDistance: 1`. We cast it
+ * as far as the suspension can hover, because at 1 the car cannot stand still.
+ *
+ * The arithmetic is forced and every number in it is recovered. Four wheels
+ * each push up by `d * pStrength * (pHoverDist - d)` per tick and gravity
+ * pulls down by `|g| * pTimeStep`. With 3.0, 1.2, 90.81 and 0.025 that
+ * balances at
+ *
+ *     4 * d * 3 * (1.2 - d) = 90.81 * 0.025   ->   d = 1.0133
+ *
+ * which is **beyond the 1.0 the ray reaches**. So at rest the wheel loses the
+ * road, falls, is caught lower down, is pushed back past 1.0, and loses it
+ * again - a limit cycle, measured here at 0.308 of bounce with a wheel off the
+ * ground on 91 ticks in 200. Play described it as driving on a potholed street
+ * while parked, which is exactly what it is.
+ *
+ * Raising the ray to the hover distance changes nothing below 1.0 and lets the
+ * wheel be held at the height the spring actually wants: measured flat, zero
+ * amplitude, no wheel ever loose. A hit beyond `HOVER_DISTANCE` still counts
+ * as ungrounded, as it always did, so the fall rule is untouched.
+ *
+ * What stays UNRESOLVED is why the original's numbers contradict each other.
+ * One of the five may be misread, or Havok's solver may have reached a
+ * different balance than the one its own constants imply. The contradiction is
+ * recorded rather than smoothed over, and this is the smallest change that
+ * makes the car stand still.
+ */
+export const HOVER_RAY_LENGTH = 1.2;
 
 /**
  * SUBSTITUTE - extra rotational inertia for the chassis.
