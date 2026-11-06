@@ -143,6 +143,19 @@ export class RaceField {
     playerTopSpeed: number,
     playerSpeed: number,
   ): void {
+    this.chooseSpeed(rival, player, playerTopSpeed, playerSpeed);
+    // One ceiling over every branch of both tables. See RIVAL_SPEED_CAP: the
+    // recovered band has none, and gives a defending rival 1.03 of the
+    // player's own top speed.
+    rival.state.maxSpeed = Math.min(rival.state.maxSpeed, K.RIVAL_SPEED_CAP);
+  }
+
+  private chooseSpeed(
+    rival: RivalRuntime,
+    player: Vec3,
+    playerTopSpeed: number,
+    playerSpeed: number,
+  ): void {
     const offset = rival.body.position.y - player.y;
 
     if (rival.duggary) {

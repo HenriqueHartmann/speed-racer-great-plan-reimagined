@@ -643,6 +643,24 @@ export const RIVAL_PLACE_HEIGHT = 1;
  * it falls to 60% until it is recycled.
  */
 export const RIVAL_SPEED_TOP = 1.03;
+
+/**
+ * SUBSTITUTE - the ceiling on a rival's target speed, in absolute units.
+ *
+ * The recovered table has no ceiling: `RIVAL_SPEED_TOP` is 1.03 of the
+ * player's own top speed, so a rival the player is catching is given 71.07
+ * against the Mach 5's 69 for one to three and a half seconds. Measured over
+ * 1,200 ticks on the real course, a rival's speed reached p95 70.53 and a
+ * peak of 72.37 while the player sat at p50 68.94 - the rubber band working
+ * exactly as `doEnemy:783` says it should.
+ *
+ * The owner asked for a rival never to out-run the Mach 5. This caps the
+ * target at 68, one below the player's 69, and leaves every recovered
+ * multiplier where it is: the shape of the band - slower, faster, slowest -
+ * survives, only its top is clipped. What is lost is the window where the
+ * original let a rival genuinely pull away from a player at full throttle.
+ */
+export const RIVAL_SPEED_CAP = 68;
 export const RIVAL_SPEED_REGULAR = 0.73;
 export const RIVAL_SPEED_MIN = 0.6;
 

@@ -398,24 +398,44 @@ describe('the Duggary', () => {
     expect(boss.woken).toBe(true);
   });
 
-  it('chases hard when it has been dropped', () => {
+  it('has its top two modes clipped by the speed cap', () => {
+    // A COST, recorded rather than hidden. The recovered table chases at 1.3
+    // and defends at 1.2 of the player's top speed - 89.7 and 82.8 against
+    // the Mach 5's 69 - and `RIVAL_SPEED_CAP` flattens both to 68. The two
+    // modes are no longer distinguishable, and the boss can never pull away
+    // from a player at full throttle. That is the owner's call applied to
+    // every rival; exempting the Duggary would be a second decision.
     const { f, bodies, boss } = promoted();
     boss.woken = true;
-    bodies[boss.index]!.position = vec3(0, 800, 0); // 100 behind
+
+    bodies[boss.index]!.position = vec3(0, 800, 0); // 100 behind: chasing
     f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
-    expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_CHASING, 6);
+    const chasing = boss.state.maxSpeed;
+
+    bodies[boss.index]!.position = vec3(0, 900.5, 0); // just ahead: defending
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    const defending = boss.state.maxSpeed;
+
+    expect(chasing).toBe(K.RIVAL_SPEED_CAP);
+    expect(defending).toBe(K.RIVAL_SPEED_CAP);
+    expect(chasing).toBeLessThan(K.MAX_SPEED);
+    // Uncapped these would differ; capped they do not.
+    expect(K.MAX_SPEED * K.DUGGARY_SPEED_CHASING)
+      .not.toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_DEFENDING, 3);
   });
 
-  it('defends when it is just ahead, and cruises when it is clear', () => {
+  it('still cruises and waits below the cap, where the table survives', () => {
     const { f, bodies, boss } = promoted();
     boss.woken = true;
-    bodies[boss.index]!.position = vec3(0, 900.5, 0);
-    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
-    expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_DEFENDING, 6);
 
-    bodies[boss.index]!.position = vec3(0, 950, 0); // 50 clear
+    bodies[boss.index]!.position = vec3(0, 950, 0); // 50 clear: cruising
     f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
     expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_CRUISING, 6);
+    expect(boss.state.maxSpeed).toBeLessThan(K.RIVAL_SPEED_CAP);
+
+    bodies[boss.index]!.position = vec3(0, 1100, 0); // 200 ahead: waiting
+    f.step(vec3(0, 900, 0), K.MAX_SPEED, K.MAX_SPEED);
+    expect(boss.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.DUGGARY_SPEED_WAITING, 6);
   });
 
   it('waits when it is a long way clear', () => {
@@ -500,5 +520,34 @@ describe('the Duggary', () => {
     bodies[boss.index]!.position = vec3(0, playerY - 500, 0);
     f.step(vec3(0, playerY, 0), K.MAX_SPEED, K.MAX_SPEED);
     expect(bodies[boss.index]!.position.y).toBeCloseTo(firstPlace, 0);
+  });
+});
+
+describe('the speed cap', () => {
+  it('never lets a rival be given more than the cap', () => {
+    const { f, bodies } = field();
+    for (let i = 0; i < 300; i++) {
+      // Sweep the rivals all round the player so every branch of the table
+      // is exercised, including the one that rolls a matched speed.
+      bodies.forEach((b, j) => (b.position = vec3(0, 1000 + ((i * (j + 3)) % 17) * 30 - 250, 0)));
+      f.step(vec3(0, 1000, 0), K.MAX_SPEED, K.MAX_SPEED);
+      for (const r of f.rivals) {
+        expect(r.state.maxSpeed).toBeLessThanOrEqual(K.RIVAL_SPEED_CAP);
+      }
+    }
+  });
+
+  it('sits one below the player s own top speed', () => {
+    expect(K.RIVAL_SPEED_CAP).toBe(K.MAX_SPEED - 1);
+  });
+
+  it('leaves the slower branches of the recovered table untouched', () => {
+    const { f, bodies } = field();
+    bodies.forEach((b) => (b.position = vec3(0, 1000, 0)));
+    tick(f, 900);
+    const r = f.rivals[0]!;
+    r.smart = false; // the 0.60 branch
+    tick(f, 900);
+    expect(r.state.maxSpeed).toBeCloseTo(K.MAX_SPEED * K.RIVAL_SPEED_MIN, 6);
   });
 });
