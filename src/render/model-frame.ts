@@ -53,18 +53,6 @@ export const PINNED_TO_CHASSIS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The periscope mast is the one assembly `doMach5` clones but never positions -
- * it only ever hides it. Its two parts were authored *relative to the parked
- * shell*, and they prove it: de-parked, the mast's base lands at z 0.255, in
- * the middle of `scope_door`'s panel (z 0.199..0.310), and its top mates with
- * `scope_top` to the third decimal. So these keep their offset, minus the park.
- *
- * Nothing draws them - see `NEVER_DRAWN` - but placing them correctly costs
- * nothing and keeps the recovered measurement where it can be checked.
- */
-export const DEPARKED_FROM_SHELL: ReadonlySet<string> = new Set(['scope_bar', 'scope_top']);
-
-/**
  * Parts the original pins to the chassis and then nudges off it.
  *
  * Only the canopy. `doMach5` line 569 reads
@@ -81,6 +69,13 @@ export const DEPARKED_FROM_SHELL: ReadonlySet<string> = new Set(['scope_bar', 's
  */
 export const CHASSIS_OFFSET: ReadonlyMap<string, Vec3Like> = new Map([
   ['windshield_top', { x: 0, y: -0.238, z: -0.313 }],
+  // The periscope, from `doCamera:73-74`: both halves are placed at the
+  // chassis transform and then translated by this. An earlier version of this
+  // file inferred an offset for them by de-parking the authoring translation,
+  // which landed in roughly the right place for the wrong reason; this is the
+  // number the game uses. The renderer then animates z by `scopeFactor`.
+  ['scope_bar', { x: -0.3, y: -0.9, z: 0.246 }],
+  ['scope_top', { x: -0.3, y: -0.9, z: 0.246 }],
 ]);
 
 /**
@@ -90,19 +85,18 @@ export const CHASSIS_OFFSET: ReadonlyMap<string, Vec3Like> = new Map([
  * `car_shadow` is a flat blob used as a drop shadow - we have real shadow
  * mapping, so drawing it as well would double up.
  *
- * `scope_top` and `scope_bar` are the periscope mast. Every script that touches
- * them sets `#none` and no script ever sets anything else - `doMach5` 129-130
- * and `doSpinner` 61-62 are the only six lines in the game that mention them.
- * The Frogger's periscope is a *camera*, not a model: `SCOPEMODE`, the
- * `scopeCam` camera and the `ovScopeUnder` / `ovScopeStatic` / `ovScopeFrame`
- * overlays in `doCamera`. Nothing rises out of the car.
+ * `scope_top` and `scope_bar` are **not** here, and a previous version of this
+ * comment was wrong to put them here. It claimed the game never shows the
+ * periscope mast, on the strength of `doMach5:129-130` and `doSpinner:61-62`
+ * setting `#none` and nothing setting anything else.
+ *
+ * Nothing in those files does. `doCamera:69-76` does, and it was missed
+ * because it addresses the models by their *cloned* names - `g3DWorld.model
+ * ("Mach5CarScopeTop")`, built as `pCarName & "CarScopeTop"` - so a search for
+ * the property or the mesh name finds neither. The mast rises, extends, and
+ * its head turns 20 degrees a frame. See `mach5-original.ts`.
  */
-export const NEVER_DRAWN: ReadonlySet<string> = new Set([
-  'collider',
-  'car_shadow',
-  'scope_top',
-  'scope_bar',
-]);
+export const NEVER_DRAWN: ReadonlySet<string> = new Set(['collider', 'car_shadow']);
 
 /**
  * Parts that are always drawn, whatever the gadgets are doing.
@@ -193,17 +187,15 @@ export interface AuthoredNode {
  * Shared by the renderer and by `tests/mach5-placement.test.ts`, so the test
  * exercises the rule the game actually uses rather than a restatement of it.
  */
-export function chassisLocalTranslation(node: AuthoredNode, park: Vec3Like): Vec3Like {
+export function chassisLocalTranslation(node: AuthoredNode, _park: Vec3Like): Vec3Like {
   if (PINNED_TO_CHASSIS.has(node.name)) {
-    const nudge = CHASSIS_OFFSET.get(node.name);
-    return nudge ? { ...nudge } : { x: 0, y: 0, z: 0 };
+    const pinnedNudge = CHASSIS_OFFSET.get(node.name);
+    return pinnedNudge ? { ...pinnedNudge } : { x: 0, y: 0, z: 0 };
   }
 
-  const t = node.translation ?? { x: 0, y: 0, z: 0 };
-  if (DEPARKED_FROM_SHELL.has(node.name)) {
-    return { x: t.x - park.x, y: t.y - park.y, z: t.z - park.z };
-  }
-  return t;
+  const nudge = CHASSIS_OFFSET.get(node.name);
+  if (nudge) return { ...nudge };
+  return node.translation ?? { x: 0, y: 0, z: 0 };
 }
 
 /**

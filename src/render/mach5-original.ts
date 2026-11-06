@@ -34,6 +34,15 @@ import {
   type Vec3Like,
 } from './model-frame.js';
 import { clearYUpConversion } from './scene-root.js';
+import {
+  BLADE_REST,
+  BLADE_SPIN_DEG,
+  SCOPE_OFFSET,
+  SCOPE_REST,
+  SCOPE_SPIN_DEG,
+  stepBlades,
+  stepScope,
+} from './gadget-animation.js';
 import { applyChassisOrientation } from './scene.js';
 import type { VehicleView, VehicleViewState } from './scene.js';
 
@@ -65,6 +74,14 @@ export class OriginalMach5 implements VehicleView {
   private readonly byName = new Map<string, THREE.Object3D>();
   private readonly wheels: THREE.Object3D[] = [];
   private robotFlight = -1;
+  /** `pBladeFactor`: the saws scale out of the bodywork rather than appearing. */
+  private bladeFactor = BLADE_REST;
+  /** The blade texture's own rotation, which is what reads as the blur. */
+  private bladeSpin = 0;
+  /** `scopeFactor` and `scopeRotate` from `doCamera`. */
+  private scopeFactor = SCOPE_REST;
+  private scopeSpin = 0;
+  private bladeMaterialCloned = false;
   /** The collider hull's centre of mass - the chassis origin we integrate about. */
   private centerOfMass: Vec3Like = { x: 0, y: 0, z: 0 };
   private loaded = false;
@@ -218,7 +235,8 @@ export class OriginalMach5 implements VehicleView {
     this.placeWheels(state);
 
     this.show(GADGET_NODES.jacks, state.jacksExtended);
-    this.show(GADGET_NODES.blades, state.bladesActive);
+    this.updateBlades(state.bladesActive);
+    this.updateScope(state.frogger);
     this.show(GADGET_NODES.lights, state.lightsActive);
     this.show(GRIP_NODES, state.gripActive);
     // The Frogger closes the Deflector's canopy rather than showing anything of
@@ -250,6 +268,101 @@ export class OriginalMach5 implements VehicleView {
       // Steer the front pair only; the rear two just roll.
       wheel.rotation.set(0, 0, i < 2 ? -steer : 0);
       wheel.rotateX(state.wheelSpin);
+    }
+  }
+
+  /**
+   * The saws grow out and their texture spins.
+   *
+   * `doMach5:586-607`. `pBladeFactor` ramps a tenth a frame between 0.1 and 1
+   * and scales the whole model, so the blades emerge from the bodywork rather
+   * than appearing at full size. They do not turn as geometry: the mesh is
+   * still and `shaderList[3]`'s texture rotates 52 degrees a frame about its
+   * own centre (`:592-594`), which is how a 2007 Shockwave game drew a blur.
+   */
+  private updateBlades(active: boolean): void {
+    this.bladeFactor = stepBlades(this.bladeFactor, active);
+    const saw = this.byName.get('saw');
+    if (!saw) return;
+
+    const out = active || this.bladeFactor > BLADE_REST;
+    saw.visible = out;
+    saw.traverse((n) => {
+      const mesh = n as THREE.Mesh;
+      if (mesh.isMesh) mesh.visible = out;
+    });
+    saw.scale.setScalar(this.bladeFactor);
+
+    if (!out) return;
+    this.bladeSpin = (this.bladeSpin + BLADE_SPIN_DEG) % 360;
+    const map = this.bladeTexture(saw);
+    if (map) {
+      map.center.set(0.5, 0.5);
+      map.rotation = (this.bladeSpin * Math.PI) / 180;
+    }
+  }
+
+  /**
+   * The texture the original spins: `shaderList[3]`, the third primitive.
+   *
+   * glTF gives a multi-primitive node a `Group` of meshes in order, so the
+   * third is index 2. Its material is cloned the first time, because the
+   * loader shares one material instance across the saw's other `blades`
+   * primitive and the original turns only this one.
+   */
+  private bladeTexture(saw: THREE.Object3D): THREE.Texture | null {
+    const mesh = saw.children[2] as THREE.Mesh | undefined;
+    if (!mesh?.isMesh) return null;
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    if (!material.map) return null;
+    if (!this.bladeMaterialCloned) {
+      const clone = material.clone();
+      clone.map = material.map.clone();
+      clone.map.needsUpdate = true;
+      mesh.material = clone;
+      this.bladeMaterialCloned = true;
+      return clone.map;
+    }
+    return material.map;
+  }
+
+  /**
+   * The periscope rises, and the hatch opens to let it.
+   *
+   * `doCamera:58-156`, which is where this lives rather than in `doMach5` -
+   * and it addresses the models by their cloned names, `Mach5CarScopeTop`, so
+   * a search for the property or the mesh name finds nothing. This project
+   * concluded from exactly that search that the mast is never drawn, and was
+   * wrong.
+   *
+   * The bar is scaled in z by `scopeFactor` and the head rides on top of it at
+   * `0.246 + scopeFactor`, turning `SCOPE_SPIN_DEG` a frame. `scope_door` is
+   * hidden while the mast is out and comes back when it retracts - which is
+   * the other half of the fix that made the door stay shut when the Frogger
+   * was off.
+   */
+  private updateScope(active: boolean): void {
+    this.scopeFactor = stepScope(this.scopeFactor, active);
+    const out = this.scopeFactor > SCOPE_REST;
+
+    this.show(['scope_door'], !out);
+    this.show(['scope_bar', 'scope_top'], out);
+    if (!out) {
+      this.scopeSpin = 0;
+      return;
+    }
+
+    const bar = this.byName.get('scope_bar');
+    if (bar) {
+      bar.position.set(SCOPE_OFFSET.x, SCOPE_OFFSET.y, SCOPE_OFFSET.z);
+      bar.scale.set(1, 1, this.scopeFactor);
+    }
+
+    const top = this.byName.get('scope_top');
+    if (top) {
+      top.position.set(SCOPE_OFFSET.x, SCOPE_OFFSET.y, SCOPE_OFFSET.z + this.scopeFactor);
+      this.scopeSpin = Math.min(360, this.scopeSpin + SCOPE_SPIN_DEG);
+      top.rotation.set(0, 0, (this.scopeSpin * Math.PI) / 180);
     }
   }
 

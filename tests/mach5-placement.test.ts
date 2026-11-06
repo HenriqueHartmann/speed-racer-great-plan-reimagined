@@ -130,15 +130,14 @@ describe('the recovered Mach 5 on the road', () => {
     }
   });
 
-  it('never draws the periscope mast', () => {
-    // `#none` in all six lines of the game that mention it; the Frogger's
-    // periscope is the scope camera, not a model that rises out of the car.
-    expect(NEVER_DRAWN.has('scope_top')).toBe(true);
-    expect(NEVER_DRAWN.has('scope_bar')).toBe(true);
-    for (const [gadget, nodes] of Object.entries(GADGET_NODES)) {
-      expect(nodes, `${gadget} must not raise the mast`).not.toContain('scope_bar');
-      expect(nodes, `${gadget} must not raise the mast`).not.toContain('scope_top');
-    }
+  it('draws the periscope mast, which it did not use to', () => {
+    // This test asserted the opposite, on the strength of `doMach5:129-130`
+    // and `doSpinner:61-62` setting `#none` and nothing else setting anything.
+    // `doCamera:69-76` does - it addresses the models by their cloned names,
+    // `Mach5CarScopeTop`, which a search for the property or the mesh name
+    // never finds. The mast rises when the Frogger deploys.
+    expect(NEVER_DRAWN.has('scope_top')).toBe(false);
+    expect(NEVER_DRAWN.has('scope_bar')).toBe(false);
   });
 
   it('still stands the unused mast in its own door', () => {
