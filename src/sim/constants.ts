@@ -546,6 +546,48 @@ export const SURFACE_DEFAULT: Surface = { grip: 1, drag: 1.0, inferredName: 'def
  */
 export const NO_GROUND_EFFECT_ID = 99;
 
+/**
+ * The surfaces whose grip is 0.016 - snow and ice.
+ *
+ * Named because the Grip gadget is treated differently over them; see
+ * `GRIP_ON_ICE_DRAG`. The ids are the measured material names, not an
+ * inference: 8 and 9 are `ROAD_BLUESNOW`, 14 and 15 are `ROAD_BlueIce`.
+ */
+export const ICE_EFFECT_IDS: ReadonlySet<number> = new Set([8, 9, 14, 15]);
+
+/**
+ * SUBSTITUTE - what the Grip gadget leaves of the car's top speed on ice.
+ *
+ * The original is blunter than this: `doMach5:643` sets `pGrip = 1` and
+ * `:1007` sets `pDrag = 1` whenever the gadget is up, so ice becomes
+ * indistinguishable from dry road - measured after the ordering fix, top 69
+ * and 0.53 s to nine tenths of it, exactly the road's own figures.
+ *
+ * The owner asked for the gadget to help without erasing the ice: a top of
+ * 64 against the road's 69, reached over a little longer. `69 * 0.9275` is
+ * 64.0, and the throttle scale below is what stretches the climb.
+ *
+ * Cornering is NOT reduced - `pGrip` stays 1, so the car holds its line,
+ * which is what the gadget is for. Only the drive is tempered.
+ */
+export const GRIP_ON_ICE_DRAG = 64 / 69;
+
+/**
+ * SUBSTITUTE - how much of the throttle the Grip gadget delivers on ice.
+ *
+ * Tuned to the owner's "a little longer than the normal road". Measured to
+ * nine tenths of each surface's own top, inside the gadget's 8.3-second
+ * window: road 0.53 s and bare ice 34.23 s, against
+ *
+ *   throttle   0.30   0.40   0.45   0.60   0.80
+ *   to 90%     1.80   1.33   1.20   0.90   0.67
+ *
+ * all of which reach exactly 64.00. 0.45 is a little over twice the road's
+ * climb, which is what "a little longer" was taken to mean; the table is
+ * here so another reading is a one-line change with its cost already known.
+ */
+export const GRIP_ON_ICE_THROTTLE = 0.45;
+
 export const SURFACES_BY_EFFECT_ID: ReadonlyMap<number, Surface> = new Map([
   [8, { grip: 0.016, drag: 1, inferredName: 'snow (ROAD_BLUESNOW_TRANS)' }],
   [9, { grip: 0.016, drag: 1, inferredName: 'snow (ROAD_BLUESNOW)' }],

@@ -166,6 +166,8 @@ export interface VehicleState {
   hasScope: boolean;
   /** Gadget activations this tick, for the caller to react to. */
   justActivated: GadgetId[];
+  /** The Grip gadget is up and the wheel is on ice: see GRIP_ON_ICE_DRAG. */
+  gripOnIce: boolean;
 }
 
 export function createVehicleState(): VehicleState {
@@ -190,6 +192,7 @@ export function createVehicleState(): VehicleState {
     hasBlades: false,
     hasScope: false,
     justActivated: [],
+    gripOnIce: false,
   };
 }
 
@@ -296,6 +299,19 @@ function updateCar(
   state.powerCoeff = groundedCount === 0 ? 0 : groundedCount / 4;
 
   updateGadgets(state, body, input, dt, tick);
+
+  // RECOVERED, and the ORDER is the point. `doMach5:643-644` sets
+  // `pGrip = 1` while the Grip gadget is up, and `:1007-1008` forces
+  // `pDrag = 1` with it - both more than a hundred lines before the throttle
+  // at `:759-764`, which reads `min(1, pGrip)` and `pMaxSpeed * pDrag`.
+  //
+  // This override used to live in `updateLateralGrip`, which runs after
+  // `updateDrive`, so it reached the cornering and never the throttle and was
+  // overwritten by the next tick's ground probe before it could. On ice that
+  // left the gadget doing nothing at all for acceleration: measured, 10.33
+  // seconds to half speed with the gadget up, exactly as without it.
+  applyGripOverride(state);
+
   updateSteering(state, body, input);
   updateDrive(state, body, input);
   updateSelfRighting(state, body);
@@ -364,7 +380,9 @@ function updateDrive(
   input: VehicleInput,
 ): void {
   const { grip, drag } = state.surface;
-  const gripLimit = Math.min(1, grip);
+  // `min(1, pGrip)` at `doMach5:760`, tempered on ice by the one substitute
+  // the Grip gadget carries. Cornering keeps the full grip either way.
+  const gripLimit = Math.min(1, grip) * (state.gripOnIce ? K.GRIP_ON_ICE_THROTTLE : 1);
 
   if (state.powerCoeff > 0 && input.forward) {
     // A proportional controller toward the surface-scaled target speed, applied
@@ -470,12 +488,30 @@ export function updateSelfRighting(state: VehicleState, body: ChassisBody): void
  * sideways momentum it had, and on touchdown the original zeroes angular
  * velocity once - the landing "chirp".
  */
-export function updateLateralGrip(state: VehicleState, body: ChassisBody): void {
-  // RECOVERED: while the Grip gadget is active the original overwrites pGrip
-  // with 1 every update, so the surface underneath stops mattering.
-  if (state.gadgets.grip.active) {
-    state.surface = K.SURFACE_DEFAULT;
+/**
+ * While the Grip gadget is up, the surface underneath stops mattering.
+ *
+ * `doMach5:643` and `:1007`. Called from `updateCar` before the throttle, and
+ * again from `updateLateralGrip` for the rivals, which compose that function
+ * without `updateCar`.
+ */
+export function applyGripOverride(state: VehicleState): void {
+  if (!state.gadgets.grip.active) {
+    state.gripOnIce = false;
+    return;
   }
+
+  // Over ice the gadget restores the grip and most, but not all, of the
+  // speed. `effectId` still holds what the wheel actually found, because the
+  // override replaces the surface and not the reading. See GRIP_ON_ICE_DRAG.
+  state.gripOnIce = K.ICE_EFFECT_IDS.has(state.effectId);
+  state.surface = state.gripOnIce
+    ? { ...K.SURFACE_DEFAULT, drag: K.GRIP_ON_ICE_DRAG }
+    : K.SURFACE_DEFAULT;
+}
+
+export function updateLateralGrip(state: VehicleState, body: ChassisBody): void {
+  applyGripOverride(state);
 
   if (state.powerCoeff === 0) {
     state.isLanding = true;
