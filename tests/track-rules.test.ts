@@ -264,6 +264,37 @@ describe('collision damage formulas', () => {
     expect(outcome.consume).toBe(true);
   });
 
+  it('a tree without Blades hurts like a wall, not like a faller', () => {
+    // `doMach5:226` is the `otherwise` branch and it catches both "solid" and
+    // "tree": only "track", "faller" and "enemyCar" are named above it. So a
+    // tree costs min(10, 30*|v|/90) and cuts yaw to 0.2, exactly as a wall
+    // does - not the faller's min(30, hitforce*10). The FALLER_ models that
+    // branch is for have no instance in this level at all.
+    const tree = resolveImpact(prop('tree'), { forwardVel: 90, reverseHeld: false, hasBlades: false });
+    const wall = resolveImpact(prop('wall'), { forwardVel: 90, reverseHeld: false, hasBlades: false });
+    expect(tree.damage).toBe(wall.damage);
+    expect(tree.damage).toBe(10);
+    expect(tree.yawCut).toBe(wall.yawCut);
+  });
+
+  it('a tree with Blades is felled and costs nothing', () => {
+    // `doHitTree` takes no damage and awards no score - a chopped tree is
+    // spectacle. It is also consumed, where an unchopped one is not.
+    const cut = resolveImpact(prop('tree'), { forwardVel: 90, reverseHeld: false, hasBlades: true });
+    expect(cut.damage).toBe(0);
+    expect(cut.consume).toBe(true);
+  });
+
+  it('a tree survives being hit without Blades', () => {
+    const hit = resolveImpact(prop('tree'), { forwardVel: 90, reverseHeld: false, hasBlades: false });
+    expect(hit.consume).toBe(false);
+  });
+
+  it('reverse suppresses tree damage, as it suppresses a wall', () => {
+    const hit = resolveImpact(prop('tree'), { forwardVel: 90, reverseHeld: true, hasBlades: false });
+    expect(hit.damage).toBe(0);
+  });
+
   it('generic impacts are capped at 10, fallers at 30', () => {
     expect(resolveImpact(prop('wall'), ctx).damage).toBeLessThanOrEqual(10);
     expect(resolveImpact(prop('faller'), ctx).damage).toBeLessThanOrEqual(30);

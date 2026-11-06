@@ -263,7 +263,21 @@ export function isDrawnTrackNode(name: string): boolean {
 export type TrackNodeRole = 'drawn' | 'hidden';
 
 const DRAWN = /^(SEG|WALL|RAIL|MISC)_\d+$/;
+/** The level's objects, drawn from their own decoded meshes. */
+const DRAWN_OBJECTS = /^(Tree_\d+|pickup_[A-Za-z]+\d+)$/;
 
 export function trackNodeRole(name: string): TrackNodeRole {
-  return DRAWN.test(name) ? 'drawn' : 'hidden';
+  return DRAWN.test(name) || DRAWN_OBJECTS.test(name) ? 'drawn' : 'hidden';
+}
+
+/**
+ * Whether a node is one of the level's individual objects.
+ *
+ * They are drawn from their own decoded geometry rather than from the
+ * placeholder boxes `createPropViews` builds, and they are hidden and shown
+ * as the simulation consumes them - so the renderer needs to find them by
+ * name and match them to a `Prop`.
+ */
+export function isTrackObjectNode(name: string): boolean {
+  return DRAWN_OBJECTS.test(name);
 }

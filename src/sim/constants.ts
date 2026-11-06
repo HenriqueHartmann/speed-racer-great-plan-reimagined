@@ -358,6 +358,28 @@ export const CANDY_RED_SCORE = 500;
 export const CANDY_PURPLE_SCORE = 1000;
 export const ROBOT_SCORE = 1000;
 export const OXYGEN_SCORE = 500;
+
+/**
+ * SUBSTITUTE - how far the car reaches to collect a pickup.
+ *
+ * Not the bodywork. Every handler in `handlePickups.ls:20-26` requires the
+ * colliding model to be `mMach5Blades`, the saw, which is the only model on
+ * the car carrying a `#collision` modifier. `doMach5.ls:586` re-sets it to
+ * the chassis transform every frame *before* the blade scaling, so it is full
+ * size with the Blades off and pickups are collected either way.
+ *
+ * The radius is a substitute because Director derives a `#sphere` modifier's
+ * radius from the model's bounding sphere, and that rule is not in this
+ * artifact. Two numbers bracket it and agree: the decoded `saw` mesh's
+ * bounding sphere about the chassis origin measures **3.683**, and
+ * `doHitTree` guards independently on `distanceTo(...) > 4`
+ * (`handlePickups.ls:6`). The stated 4 is used; the measured 3.683 is the
+ * evidence beside it.
+ *
+ * Before this, pickups were tested against the chassis box, whose
+ * half-diagonal is 1.51 - well under half the reach.
+ */
+export const PICKUP_REACH = 4;
 /** RECOVERED - oxygen pickup. */
 export const OXYGEN_PICKUP = 50;
 /** RECOVERED - awarded by `doFinish` when finishing first. */

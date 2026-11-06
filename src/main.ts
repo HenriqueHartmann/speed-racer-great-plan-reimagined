@@ -30,10 +30,12 @@ import { TrackView } from './render/track-view.js';
 import { SegmentColliders } from './physics/segment-colliders.js';
 import { PropColliders } from './physics/prop-colliders.js';
 import { parseGroundMesh, parseSolidMesh } from './sim/ground-mesh.js';
+import { parseTrackObjects, populateTrack } from './sim/track-objects.js';
 import { OriginalMach5 } from './render/mach5-original.js';
 
 const TRACK_GROUND_URL = 'models/track-ground.bin';
 const TRACK_SOLIDS_URL = 'models/track-solids.bin';
+const TRACK_OBJECTS_URL = 'models/track-objects.bin';
 
 /** Driving keys are held; gadget keys are edge-triggered. */
 type DriveKey = 'forward' | 'backward' | 'left' | 'right';
@@ -149,6 +151,16 @@ async function main(): Promise<void> {
   // models are scenery and stay drawn and inert.
   const solids = parseSolidMesh(new Uint8Array(await (await fetch(TRACK_SOLIDS_URL)).arrayBuffer()));
   const solidColliders = new SegmentColliders(host, solids);
+
+  // The level's trees and pickups. They are filed into the track before any
+  // collider is built, because PropColliders reads the track it is given.
+  const objects = parseTrackObjects(
+    new Uint8Array(await (await fetch(TRACK_OBJECTS_URL)).arrayBuffer()),
+  );
+  const filed = populateTrack(track, objects);
+  if (filed !== objects.length) {
+    console.warn(`only ${filed} of ${objects.length} track objects could be filed`);
+  }
   let solidSegment = 1;
   segmentColliders.setActive(solidSegment);
   solidColliders.setActive(solidSegment);
@@ -237,17 +249,36 @@ async function main(): Promise<void> {
 
   // The road itself. A missing or broken track model degrades to an empty
   // world you can still drive in, rather than a blank screen.
+  let trackView: TrackView | null = null;
   try {
     const view = await TrackView.load();
     const { drawn, hidden, uprighted } = view.report();
-    if (drawn !== ground.segmentCount || !uprighted) {
-      console.warn(`track model drew ${drawn} of ${ground.segmentCount} segments, hid ${hidden}, uprighted ${uprighted}`);
+    if (!uprighted) {
+      console.warn(`track model drew ${drawn}, hid ${hidden}, uprighted ${uprighted}`);
     }
     scene.add(view.object);
+    trackView = view;
   } catch (err) {
     console.warn('the track model did not load:', err);
   }
-  const propViews = createPropViews(scene, track.segments);
+  // The props are drawn as the meshes they are, matched to the simulation's
+  // props by position in the extractor's name-sorted list. The placeholder
+  // boxes stay as the fallback for a missing or short model file.
+  const propViews = new Map<number, THREE.Object3D>();
+  const nodes = trackView?.objectNodes() ?? [];
+  if (nodes.length === objects.length) {
+    const props = track.segments.flatMap((seg) => seg.props);
+    const byOrder = [...props].sort((a, b) => a.id - b.id);
+    objects.forEach((_, i) => propViews.set(byOrder[i]!.id, nodes[i]!));
+  } else {
+    if (trackView) {
+      console.warn(
+        `the track model has ${nodes.length} object nodes for ${objects.length} objects; ` +
+          'drawing placeholder boxes instead',
+      );
+    }
+    for (const [id, view] of createPropViews(scene, track.segments)) propViews.set(id, view);
+  }
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));

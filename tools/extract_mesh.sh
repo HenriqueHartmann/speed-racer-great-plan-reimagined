@@ -95,6 +95,11 @@ node "$ROOT/tools/build_track_ground.mjs" "$OUT/track.glb" "$OUT/track-ground.bi
 echo "==> building the barriers"
 node "$ROOT/tools/build_track_solids.mjs" "$OUT/track.glb" "$OUT/track-solids.bin"
 
+# 7. And the individual objects: 355 trees and 77 pickups.
+echo "==> building the objects"
+node "$ROOT/tools/build_track_objects.mjs" "$OUT/track.glb" "$OUT/track-objects.bin"
+
 echo
 echo "wrote:"
-sha256sum "$OUT/mach5.glb" "$OUT/track.glb" "$OUT/track-ground.bin" "$OUT/track-solids.bin"
+sha256sum "$OUT/mach5.glb" "$OUT/track.glb" "$OUT/track-ground.bin" \
+          "$OUT/track-solids.bin" "$OUT/track-objects.bin"

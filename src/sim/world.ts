@@ -19,7 +19,7 @@ import {
   type VehicleInput,
   type VehicleState,
 } from './vehicle.js';
-import { overlaps, resolveImpact } from './collision.js';
+import { overlaps, resolveImpact, withinReach } from './collision.js';
 import { rearmRobot } from './gadgets.js';
 import { segmentIndexFor, type Track } from './track.js';
 
@@ -173,7 +173,13 @@ export class World {
     const stillTouching = new Set<number>();
 
     for (const prop of this.track.collidableProps()) {
-      if (!overlaps(pos, carHalf, prop.position, prop.halfExtent)) continue;
+      // A pickup is reached by the saw, not by the bodywork: a sphere at the
+      // chassis origin rather than the chassis box. See PICKUP_REACH.
+      const touching =
+        prop.kind === 'pickup'
+          ? withinReach(pos, prop.position, prop.halfExtent, K.PICKUP_REACH)
+          : overlaps(pos, carHalf, prop.position, prop.halfExtent);
+      if (!touching) continue;
       stillTouching.add(prop.id);
 
       // Pickups ignore the debounce: they are consumed on contact, so there is

@@ -18,8 +18,17 @@ import * as K from './constants.js';
 import { castDownMesh, flatGroundMesh, type GroundMesh } from './ground-mesh.js';
 import { vec3, type GroundHit, type GroundProbe, type Vec3 } from './vehicle.js';
 
-/** What a prop does when the car touches it, mirroring `userData.kind`. */
-export type PropKind = 'track' | 'faller' | 'enemyCar' | 'wall' | 'pickup';
+/**
+ * What a prop does when the car touches it, mirroring `userData.kind`.
+ *
+ * `tree` and `faller` are not the same thing, though both are things that
+ * fall. A tree takes `doMach5:226`'s `otherwise` branch - the one that catches
+ * `"solid"` and `"tree"` alike, because only `"track"`, `"faller"` and
+ * `"enemyCar"` are named above it - so it costs what a wall costs. A faller is
+ * the `FALLER_NN_OBJ` of `PREP:288-294`, which costs three times as much and
+ * has no instance anywhere in this level.
+ */
+export type PropKind = 'track' | 'tree' | 'faller' | 'enemyCar' | 'wall' | 'pickup';
 
 export type PickupKind = 'wrench' | 'candyPurple' | 'candyRed' | 'oxygen' | 'robot';
 

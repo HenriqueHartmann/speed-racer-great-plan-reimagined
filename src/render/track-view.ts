@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { trackNodeRole } from './model-frame.js';
+import { isTrackObjectNode, trackNodeRole } from './model-frame.js';
 import { clearYUpConversion } from './scene-root.js';
 
 export const TRACK_MODEL_URL = 'models/track.glb';
@@ -75,6 +75,22 @@ export class TrackView {
   static async load(url = TRACK_MODEL_URL): Promise<TrackView> {
     const gltf = await new GLTFLoader().loadAsync(url);
     return new TrackView(gltf.scene);
+  }
+
+  /**
+   * The level's object nodes, keyed by the order the extractor sorted them.
+   *
+   * `tools/build_track_objects.mjs` sorts by segment then by name, and the
+   * simulation files them in that order, so a prop's position in the track
+   * matches a node here. Matching by name would be better and needs the name
+   * carried through the binary; this is the cheaper link and the test below
+   * pins that the two orders agree.
+   */
+  objectNodes(): THREE.Object3D[] {
+    const root = this.object.getObjectByName('SceneRoot') ?? this.object;
+    return root.children
+      .filter((n) => isTrackObjectNode(n.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /** What was drawn and what was not, so a silent mismatch cannot pass. */

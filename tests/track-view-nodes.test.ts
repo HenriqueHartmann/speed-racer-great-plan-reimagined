@@ -25,7 +25,7 @@ describe('isDrawnTrackNode', () => {
   });
 
   it('leaves the positioning nodes and the props out', () => {
-    for (const name of ['SceneRoot', 'carPos_Mach5', 'path_01', 'path_209', 'Tree_01', 'pickup_Wrench01']) {
+    for (const name of ['SceneRoot', 'carPos_Mach5', 'path_01', 'path_209']) {
       expect(isDrawnTrackNode(name), name).toBe(false);
     }
   });
@@ -70,8 +70,17 @@ describe('trackNodeRole', () => {
     }
   });
 
+  it('draws the level objects from their own meshes', () => {
+    // Pass 2 stops hiding these: a tree is drawn as the tree it is, not as a
+    // green box. They are still shown and hidden per prop as they are felled
+    // or collected.
+    for (const name of ['Tree_01', 'Tree_388', 'pickup_Robot03', 'pickup_CandyRed01']) {
+      expect(trackNodeRole(name), name).toBe('drawn');
+    }
+  });
+
   it('hides everything that is not this step', () => {
-    for (const name of ['Tree_01', 'pickup_Robot03', 'path_01', 'carPos_Mach5', 'WATER_34', 'Sphere01']) {
+    for (const name of ['path_01', 'carPos_Mach5', 'WATER_34', 'Sphere01']) {
       expect(trackNodeRole(name), name).toBe('hidden');
     }
   });
@@ -118,15 +127,18 @@ describe('applyTrackVisibility', () => {
     for (const child of seg.children) expect(child.visible, child.name).toBe(true);
   });
 
-  it('hides the props and the positioning nodes', () => {
+  it('hides the fences and the positioning nodes, and draws the trees', () => {
     const root = loaderShapedScene();
     applyTrackVisibility(root);
-    for (const name of ['Tree_1', 'INV_1', 'carPos_Mach5', 'path_01']) {
+    expect(root.getObjectByName('Tree_1')!.visible).toBe(true);
+    for (const name of ['INV_1', 'carPos_Mach5', 'path_01']) {
       expect(root.getObjectByName(name)!.visible, name).toBe(false);
     }
   });
 
   it('counts what it drew and what it hid', () => {
-    expect(applyTrackVisibility(loaderShapedScene())).toEqual({ drawn: 2, hidden: 4 });
+    // Two segments and one tree drawn; the fence, the spawn marker and the
+    // path node hidden.
+    expect(applyTrackVisibility(loaderShapedScene())).toEqual({ drawn: 3, hidden: 3 });
   });
 });
